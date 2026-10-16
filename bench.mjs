@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  APPS, businessOk, call, copyAppSource, editSource, fileSize, githubWorkflow, machine, readRevision, record, ROOT,
+  APPS, businessOk, call, copyAppSource, editSource, fileSize, functionNames, githubWorkflow, machine, readRevision, record, ROOT,
   run, sleep, targetNames, waitForRevisions
 } from './lib.mjs';
 
@@ -90,6 +90,11 @@ async function packageRuns() {
   if (!tool.package || appId === 'five-services') throw new Error(`No packaging test for ${toolName} on ${appId}`);
   await prepare();
   const info = await describeRun();
+  // One untimed run first, for every tool: it downloads anything a tool fetches on first use (Serverless its
+  // framework, Stacktape its base images) and leaves a previous build for the warm series. Base images then stay in
+  // the local image store; clean runs empty only the build cache.
+  for (const image of tool.baseImages?.(ctx) ?? []) await ctx.run(['docker', 'pull', image]);
+  await ctx.run(tool.package(ctx));
   for (let i = 1; i <= runs; i++) {
     if (values.warm) {
       // Keep the previous build and its cache; change only the source, like a developer's next build.
@@ -191,6 +196,9 @@ async function pushRuns() {
 
 async function remove() {
   for (const cmd of list(tool.remove(ctx))) await ctx.run(cmd);
+  // A remove command can exit 0 without deleting everything (SST does when interrupted), so check.
+  const left = app.kind === 'lambda' ? await functionNames(`${name}-`) : [];
+  if (left.length) throw new Error(`These functions still exist after remove: ${left.join(', ')}`);
   rmSync(addressFile, { force: true });
   console.log(`Removed ${name}.`);
 }

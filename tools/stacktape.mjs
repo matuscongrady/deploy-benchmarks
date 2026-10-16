@@ -20,8 +20,6 @@ function config({ app, name }) {
   if (app.kind === 'lambda') {
     for (const fn of app.functions) {
       const packaging = { entryfilePath: `handlers/${fn}.mjs` };
-      // PDFKit reads its font files from disk, so it cannot be bundled.
-      if (fn === 'report') packaging.dependenciesToExcludeFromBundle = ['pdfkit'];
       resources[camel(fn)] = {
         type: 'function',
         properties: { packaging: { type: 'js-bundle', properties: packaging }, runtime: 'nodejs22.x', memory: 512, timeout: 30 }
@@ -49,18 +47,21 @@ export default {
   version: () => capture([bin, 'version']).match(/version: (\S+?)\.?$/m)?.[1],
   buildOutputs: ['.stacktape'],
   package: () => [bin, 'package', ...common],
-  // `package` writes the function ZIPs. Shared layers are zipped only during deploy, so we zip them here.
+  // `package` writes the function ZIPs and, beside them, the source maps that deploy uploads separately
+  // (`*.source-maps.json`). Shared layers are zipped only during deploy, so we zip their directories here.
   // Container images go to the local Docker image store.
   artifacts({ app, dir }) {
     if (app.kind === 'service') return [{ file: 'api-service-container', bytes: imageBytes('api-service-container:latest') }];
     const [invocation] = readdirSync(join(dir, '.stacktape'));
     const build = join(dir, '.stacktape', invocation, 'build');
-    const zips = readdirSync(join(build, 'lambdas')).filter((f) => f.endsWith('.zip'));
+    const files = readdirSync(join(build, 'lambdas')).filter((f) => f.endsWith('.zip') || f.endsWith('.source-maps.json'));
     const layerDir = join(build, 'layers');
-    const layers = existsSync(layerDir) ? readdirSync(layerDir) : [];
+    const layers = existsSync(layerDir) ? readdirSync(layerDir, { withFileTypes: true }) : [];
     return [
-      ...zips.map((f) => ({ file: `lambdas/${f}`, path: join(build, 'lambdas', f) })),
-      ...layers.map((layer) => ({ file: `layers/${layer}.zip`, bytes: zipSize(join(layerDir, layer)) }))
+      ...files.map((f) => ({ file: `lambdas/${f}`, path: join(build, 'lambdas', f) })),
+      ...layers.map((e) =>
+        e.isDirectory() ? { file: `layers/${e.name}.zip`, bytes: zipSize(join(layerDir, e.name)) } : { file: `layers/${e.name}`, path: join(layerDir, e.name) }
+      )
     ];
   },
   // Code-only changes are updated directly (without CloudFormation) by the default deploy.

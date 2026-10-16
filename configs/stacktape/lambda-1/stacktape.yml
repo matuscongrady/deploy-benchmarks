@@ -1,0 +1,19 @@
+{
+  "projectName": "bmk-stacktape-lambda-1",
+  "resources": {
+    "report": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/report.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    }
+  }
+}

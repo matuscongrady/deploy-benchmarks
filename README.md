@@ -1,172 +1,232 @@
 # Deploy benchmarks
 
-This repository measures how long it takes to package an application and to get a code change serving, with
-Stacktape and with the tools people compare it to. Every tool deploys the same applications, gets the same source
-edit and is timed the same way. Every tool runs with its documented defaults. Where a tool needed a setting to make
-an application work at all, this README says which setting and why.
+This repository measures two things for several deployment tools:
 
-The results feed two charts on the Stacktape website: "Packages it" and "Deploys it".
+- **Packaging:** how long a tool takes to turn an application into what it uploads, and how big that upload is.
+- **Deploying a change:** how long it takes from starting a deploy until the changed code answers requests.
 
-## What is measured
+The tools are Stacktape, Serverless Framework, SST, AWS CDK, Render, Heroku and Ravion. Stacktape publishes these
+results on its website, so we wrote down every choice we made. If you think a tool is set up worse than its users
+would set it up, please [open an issue](#think-a-tool-is-set-up-badly).
 
-| Test | Applications | Tools | Measured |
-| --- | --- | --- | --- |
-| Lambda packaging | 1, 5 and 25 functions | Stacktape, Serverless Framework, SST, AWS CDK | Packaging time and total upload size |
-| Container packaging | Node API, Python API | Stacktape, SST, CDK, Ravion, Render, Heroku | Build time and image (or slug) size |
-| Deploy a change from a laptop | all of the above, plus five services | the tools above that deploy from the CLI | Time until the new code serves |
-| Deploy a change by Git push, cold | all of the above, plus five services | every tool | Time until the new code serves |
-| Deploy a change by Git push, warm | same as cold, pushed 15 minutes later | every tool | Time until the new code serves |
+## Results
 
-The applications are in [`fixtures/`](fixtures/README.md). They are small commerce apps whose code does real work:
-the report function builds a PDF, an Excel workbook and a Word document. The Lambda apps use 1, 5 and 25 of the 25
-handlers. The Node and Python APIs serve the same storefront routes. The five-service app has five independently
-deployed Node services; the change edits three of them, and the other two must keep serving their old revision.
+Results will be published here after the measurement runs on a dedicated EC2 machine.
 
-## How it is measured
+| Test | Stacktape | Serverless Framework | SST | AWS CDK | Render | Heroku | Ravion |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Package 1 / 5 / 25 Lambda functions | – | – | – | – | | | |
+| Build the Node.js / Python container | – | | – | – | – | – | – |
+| Deploy a change from a laptop | – | – | – | – | | – | |
+| Deploy a change by Git push | – | – | – | – | – | – | – |
 
-**The code change.** Every target (function or service) has a revision file, for example
-`handlers/report.revision.mjs` containing `export const revision = 'baseline';`. A deploy run writes a new revision
-string into the revision file of every changed target and commits it. Every response from the applications includes
-the revision of the code that produced it.
+Each cell will show the median of ten runs, with the fastest and slowest run. The raw data for every run is in
+`results/`, and `node report.mjs` prints the summary.
 
-**Deploy timer.** The timer starts when the deploy command starts. For a Git push it starts when `git push` returns.
-It stops when every changed function or service returns the new revision. Each function is invoked every 250 ms and
-each service is called every second (`GET /version`); a new call starts on schedule even when an earlier call is
-still running, so a slow function does not coarsen the timer. The timer does not wait for the CLI to exit; the CLI time is
-recorded separately as `commandMs`. After the timer stops, every target must pass its business check (for example
-`POST /quote` must return `total: "33.00"`) from the expected revision, so unchanged services must still run their
-old code. Runs that
-fail these checks are recorded but left out of the summary.
+## What we measured
 
-**Packaging timer.** The timer covers the tool's own packaging command. Before each run the tool's build output is
-deleted, and for container builds the Docker build cache is emptied (`docker builder prune -af`). Base images stay
-pulled. The `--warm` variant keeps the previous build and changes only the source, as in a developer's next build;
-it is meaningful only for tools that cache builds by default (the Docker builds).
+We use small commerce applications whose code does real work. One function builds a PDF, an Excel workbook and a
+Word document; others price carts, verify webhook signatures or parse CSV files. They are described in
+[`fixtures/README.md`](fixtures/README.md).
 
-**Upload size.** For Lambda it is the total size of the code the tool uploads: every function ZIP, every layer it
-creates, and source maps the tool uploads beside the ZIPs (SST does this). For containers it is the compressed image
-size reported by the local Docker image store, which is what a push to an empty registry uploads. Heroku reports a
-compressed slug instead of an image, so its size is a different format. Render does not report an artifact size.
-
-**Not timed.** Creating the infrastructure the first time (`setup`), bootstrapping accounts, installing tools and
-dependencies, and the checks after each run.
-
-**Recorded per run.** Tool, tool version, the Stacktape commit when Stacktape is built from source, the machine
-(CPU, memory, and on EC2 the instance type and region), timings, sizes and the path of the full command log. Results
-are appended to `results/package.jsonl` and `results/deploy.jsonl`.
-
-## Commands and settings per tool
-
-All AWS tools deploy to the same region. Functions use Node.js 22 with 512 MB of memory and a 30 second timeout on
-every tool. Containers use 0.25 vCPU and 512 MB on every AWS tool.
-
-| Tool | Packaging command | CLI deploy command | Git push deploy |
-| --- | --- | --- | --- |
-| Stacktape | `stacktape package --stage bmk --region eu-west-1` | `stacktape deploy --stage bmk --region eu-west-1 --awsAccount <name> --autoConfirmOperation` | Stacktape Console GitOps |
-| Serverless Framework 4.44.0 | `serverless package --stage bmk` | `serverless deploy --stage bmk` | GitHub Actions running `serverless deploy` |
-| SST 4.17.2 | `sst diff --stage bmk` (functions), `docker build` (containers) | `sst deploy --stage bmk` | GitHub Actions running `sst deploy` |
-| AWS CDK 2.1145.0 (lib 2.273.0) | `cdk synth` (functions), `docker build` (containers) | `cdk deploy --require-approval never` | GitHub Actions running `cdk deploy` |
-| AWS CDK, hotswap | as CDK | `cdk deploy --require-approval never --hotswap` | none |
-| Ravion | its Railpack build (from the pipeline record) | none: deploys only from Git | Ravion's Git trigger |
-| Render | its native build (from the service events) | none: deploys only from Git | Render auto-deploy |
-| Heroku | its buildpack build (from the build record) | `git push heroku main` | Heroku GitHub integration |
-
-Notes on these choices:
-
-- **Stacktape.** The default `deploy` updates code-only changes directly instead of going through CloudFormation.
-  Node services use `js-bundle` packaging and the Python service uses `buildpack`, as Stacktape's docs recommend.
-  Stacktape's `package` command does not zip shared layers (deploy does), so their size is measured by zipping the
-  layer directories, and their zipping time is not in Stacktape's packaging time.
-- **Serverless Framework.** No `build` or `package` settings. For JavaScript handlers its default is one ZIP of the
-  whole project with its production `node_modules`, shared by all functions; it bundles with esbuild by default only
-  for TypeScript. `serverless deploy function` is a faster, separate command, but it is not the default deploy.
-- **SST.** SST has no packaging-only command. `sst diff` against the deployed stage builds and zips every function,
-  so its time also includes comparing the plan with the deployed state. For containers SST runs `docker build`
-  during deploy; the packaging test times the same `docker build` directly.
-- **CDK.** `cdk synth` bundles each function with esbuild (installed in the project, as CDK recommends). CDK zips the
-  bundles later, during `cdk deploy`, so zipping is not in CDK's packaging time; the upload size zips each bundle at
-  zlib's default level, as CDK does. Containers are built with `docker build` during deploy, timed directly here.
-- **CDK hotswap.** `--hotswap` is CDK's fast path for code changes. CDK documents it for development only: it skips
-  CloudFormation and leaves the stack drifted. It is reported as a separate tool so readers can see both.
-- **Python on Railpack** (Stacktape's Python buildpack, Ravion) installs the Python interpreter during the build. A
-  Dockerfile build gets it from its base image, which stays pulled between runs, so a clean Railpack build does more
-  work than a clean Dockerfile build.
-- **SST and CDK containers** build the same plain Dockerfile (official slim image, locked production install, then
-  the source); see `dockerfile()` in [`lib.mjs`](lib.mjs). Their container packaging results are therefore the same
-  measurement. Stacktape, Ravion, Render and Heroku build without a Dockerfile.
-- **Render** uses the build and start commands from its Express and FastAPI guides (`npm install`, `npm start`;
-  `pip install -r requirements.txt`, `uvicorn ...`) on Starter instances.
-- **Heroku** uses the default stack, the official Node.js and Python buildpacks and the fixture's `Procfile`. Each
-  service is a separate Heroku app. For the five-service app, each service is pushed with `git subtree push`, because
-  Heroku builds the repository root.
-
-Settings that a tool needed to make the applications work:
-
-| Setting | Tools | Why |
+| Test | Applications | Tools |
 | --- | --- | --- |
-| Keep `pdfkit` out of the bundle and install it | Stacktape (`dependenciesToExcludeFromBundle`), SST (`nodejs.install`), CDK (`bundling.nodeModules`) | PDFKit reads font files from disk at run time. Serverless needs nothing because it does not bundle by default. |
-| Load balancer health check path `/health` | SST, CDK | The default path `/` returns 404 in these apps, so the services would never become healthy. |
+| Lambda packaging | 1, 5 and 25 functions | Stacktape, Serverless Framework, SST, AWS CDK |
+| Container build | a Node.js API and a Python API | Stacktape, SST, AWS CDK, Render, Heroku, Ravion |
+| Deploy a change from a laptop | all of the above | the tools that deploy from the command line |
+| Deploy a change by Git push, first push | all of the above, plus five services | every tool |
+| Deploy a change by Git push, 15 minutes later | same as the first push | every tool |
 
-## Reproduce the measurements
+In the five-service application, the change edits three services. The other two must keep running their old code.
 
-### Machine and tools
+## How a run works
 
-Run the campaign on a dedicated machine, for example an EC2 instance in the same region as the deployments. You need
-Node.js 22 or newer, npm, Docker with BuildKit, `zip`, the AWS CLI with credentials for a disposable account, and Git.
-The Git journeys also need the GitHub CLI (`gh`), and the hosted platforms need their CLIs (see below).
+**The change.** Every function and service has a small revision file, for example
+[`handlers/report.revision.mjs`](fixtures/lambdas/handlers/report.revision.mjs). A deploy run writes a new revision
+string into the revision file of every changed function or service. Every response from the applications contains
+the revision of the code that produced it. All tools get the same change.
+
+**When a deploy counts as done.** The clock starts when the deploy command starts. For a Git push, it starts when
+`git push` returns. The clock stops when every changed function or service has returned the new revision. Functions
+are invoked every 250 ms and services are called every second. The clock does not wait for the command to exit; the
+command's own duration is recorded separately. After the clock stops, every function and service must also return
+the right business result (for example a cart total of `33.00`) from the expected revision. Runs that fail this
+check are kept in the raw data but left out of the results.
+
+**Packaging.** The clock covers the tool's own packaging command. Before each run we delete the tool's previous build
+output. For container builds we also empty Docker's build cache. Base images stay in the local image store for every
+tool: we pull the base image of the SST and CDK Dockerfile before the series, and Stacktape pulls its own base images.
+Every series starts with one run that is not measured, so nothing a tool downloads on first use is timed. The
+"warm" container series keeps the previous build and changes only the source, like a developer's next build.
+
+**Upload size.** For Lambda, this is everything the tool uploads as code: each function's ZIP, each layer it creates,
+and the source maps it uploads next to the ZIPs (SST and Stacktape do this). For containers, it is the compressed
+image size reported by the local Docker image store, which is what a push to an empty registry uploads. Heroku
+reports a compressed slug instead of an image. Render does not report a size.
+
+**Not measured.** Creating the infrastructure the first time, installing tools and dependencies, and the checks
+after each run.
+
+**Recorded for every run:** the tool and its version, the Stacktape commit when Stacktape is built from source, the
+machine, the timings, the sizes and a log of every command.
+
+## How each tool is set up
+
+Every tool uses its documented defaults, except where noted in [Where a tool needed help](#where-a-tool-needed-help).
+On AWS, every function uses Node.js 22 with 512 MB of memory and a 30-second timeout, and every container uses
+0.25 vCPU and 512 MB. The exact files are in [`configs/`](configs); `node configs.mjs` regenerates them from the tool
+modules in [`tools/`](tools).
+
+### Stacktape
+
+- Configuration: [`configs/stacktape/`](configs/stacktape), written by [`tools/stacktape.mjs`](tools/stacktape.mjs).
+- Packaging: `stacktape package`. Deploy: `stacktape deploy`.
+- Functions and the Node.js service use Stacktape's `js-bundle` packaging. The Python service uses `buildpack`.
+- `stacktape deploy` updates code-only changes directly, without a CloudFormation update. This is its default.
+- Git push: Stacktape Console's Git integration, which builds on a runner in your AWS account. The runner stops after
+  15 idle minutes, so the push 15 minutes later starts a stopped runner.
+
+### Serverless Framework
+
+- Configuration: [`configs/serverless/`](configs/serverless), written by [`tools/serverless.mjs`](tools/serverless.mjs).
+- Packaging: `serverless package`. Deploy: `serverless deploy`.
+- Version 4 with its built-in esbuild bundling (`build.esbuild`), with esbuild's default options. Without that
+  setting, version 4 bundles only TypeScript handlers. We turned it on because most Serverless projects bundle their
+  code. In the last month, the [`serverless`](https://www.npmjs.com/package/serverless) package had 5.9 million
+  downloads, [`serverless-esbuild`](https://www.npmjs.com/package/serverless-esbuild) 2.0 million,
+  [`serverless-webpack`](https://www.npmjs.com/package/serverless-webpack) 1.0 million and
+  [`serverless-plugin-typescript`](https://www.npmjs.com/package/serverless-plugin-typescript) 0.5 million. Weekly,
+  [version 3 had 681,000 downloads and version 4 had 511,000](https://www.npmjs.com/package/serverless?activeTab=versions)
+  (October 2026).
+- `serverless deploy function` is faster for a single function, but it is a separate command and skips
+  CloudFormation, so we use `serverless deploy`.
+- Git push: GitHub Actions, using the [shared workflow](configs/serverless/lambda-5/.github/workflows/deploy.yml).
+  Serverless Framework v4 has no Git deployment service of its own.
+
+### SST
+
+- Configuration: [`configs/sst/`](configs/sst), written by [`tools/sst.mjs`](tools/sst.mjs).
+- Deploy: `sst deploy`. Functions use `sst.aws.Function`; services use `sst.aws.Service` on an SST cluster.
+- Packaging: SST has no command that only packages. `sst diff` on a deployed stage builds and zips every function,
+  then compares the plan with what is deployed. Its time therefore includes that comparison, which reads from AWS.
+- Containers are built from a plain [Dockerfile](configs/sst/node/Dockerfile): the official slim image, a locked
+  production install, then the source. SST runs `docker build` during `sst deploy`; the packaging test runs the same
+  `docker build` directly.
+- Git push: the [shared GitHub Actions workflow](configs/sst/lambda-5/.github/workflows/deploy.yml). SST's own
+  Autodeploy needs an SST Console account and is not measured.
+
+### AWS CDK
+
+- Configuration: [`configs/cdk/`](configs/cdk), written by [`tools/cdk.mjs`](tools/cdk.mjs).
+- Deploy: `cdk deploy`. Functions use `NodejsFunction`; services use `ApplicationLoadBalancedFargateService`.
+- Packaging: `cdk synth`, which bundles each function with esbuild (installed in the project, as CDK recommends).
+  CDK zips the bundles later, during `cdk deploy`, so zipping is not part of CDK's packaging time. For the upload
+  size we zip each bundle at the same compression level CDK uses.
+- Containers use the same Dockerfile as SST and the same direct `docker build`.
+- Git push: the [shared GitHub Actions workflow](configs/cdk/lambda-5/.github/workflows/deploy.yml).
+- **CDK with hotswap** is reported as a separate tool. `cdk deploy --hotswap` updates Lambda code and ECS services
+  directly, which is CDK's fast path for code changes. CDK documents it for development stacks only, because it
+  leaves the CloudFormation stack out of date. Its first deploy is a normal `cdk deploy`.
+
+### Render
+
+- Configuration: [`configs/render/`](configs/render), written by [`tools/render.mjs`](tools/render.mjs).
+- Render's native Node.js and Python runtimes on Starter instances, with the build and start commands from Render's
+  Express and FastAPI guides.
+- Render deploys only from a Git repository, so it has no laptop deploy. Build time comes from Render's build events.
+
+### Heroku
+
+- [`tools/heroku.mjs`](tools/heroku.mjs). No extra configuration: the applications already have a `Procfile` and
+  runtime version files.
+- The default stack and the official Node.js and Python buildpacks. Each service is its own Heroku app.
+- Laptop deploy: `git push` to Heroku's Git remote. Git push: Heroku's GitHub integration with automatic deploys.
+- Heroku builds the repository root. For the five-service application we push each service with `git subtree push`,
+  and its GitHub integration cannot deploy it.
+
+### Ravion
+
+- [`tools/ravion.mjs`](tools/ravion.mjs). No extra configuration: Ravion's default builder, Railpack, detects the
+  runtime and start command from the source.
+- Ravion deploys only from a Git repository, so it has no laptop deploy. Build time comes from Ravion's pipeline runs.
+
+## Where a tool needed help
+
+| What | Tools | Why |
+| --- | --- | --- |
+| Keep `pdfkit` out of the bundle and install it as a package: `build.esbuild.external` (Serverless), `nodejs.install` (SST), `bundling.nodeModules` (CDK) | Serverless Framework, SST, AWS CDK | PDFKit reads its font files from disk. Bundled, the report function fails with `ENOENT ... Helvetica.afm`. We checked that each of these tools fails without the setting. Stacktape detects such packages itself. |
+| Load balancer health check path `/health` | SST, AWS CDK | The default path `/` returns 404 in these applications, so the services would never become healthy. |
+| A Dockerfile | SST, AWS CDK | Both need one to build a container. Stacktape, Render, Heroku and Ravion build from the source. |
+| `--awsAccount` | Stacktape | Stacktape deploys with credentials from the Stacktape Console for a connected AWS account, not with `AWS_PROFILE`. |
+
+## Known limitations
+
+- **Stacktape is not the fastest or smallest everywhere.** In our local test runs, AWS CDK's Lambda uploads were
+  smaller at every size, partly because CDK uploads no source maps by default. Serverless Framework's upload was
+  smaller for 5 functions. The plain Dockerfile that SST and CDK build produced both container images faster than
+  Stacktape, from an empty build cache and after a source change. The published results will show every case where
+  Stacktape loses.
+- **The tools roll out changes differently.** Serverless Framework and AWS CDK go through CloudFormation. Stacktape
+  and CDK with hotswap update code directly. SST uses Pulumi. Render, Heroku and Ravion run their own pipelines. We
+  measure each tool's normal path; the guarantees are not the same.
+- **First response.** A service counts as updated at its first response from the new code. During a rolling update,
+  some requests can still reach the old code for a short time.
+- **SST's packaging time** includes the plan comparison of `sst diff`, because SST has no packaging-only command.
+- **CDK's and Stacktape's packaging times** do not include zipping that happens only during deploy (CDK's function
+  bundles, Stacktape's shared layers). Their upload sizes do include those ZIPs.
+- **Hosted builders** (Render, Heroku, Ravion) run on the provider's machines, so their build times depend on the
+  provider's capacity. Render and Ravion have no way to empty only the build cache, so their first-push runs need a
+  manual cache reset.
+- **One machine, one region, one period.** The results describe this setup, not every project.
+
+## Rerun everything yourself
+
+You need Node.js 22 or newer, npm, Git, Docker with BuildKit, `zip`, the AWS CLI and a disposable AWS account.
+Everything the benchmark creates is named `bmk-*`. Run on a dedicated machine in the same region as the deployments;
+we use EC2.
 
 ```sh
-npm install                 # installs the AWS SDK used to invoke functions
-export AWS_PROFILE=...      # a disposable account; every resource is named bmk-*
+npm install                  # the AWS SDK used to invoke functions
+export AWS_PROFILE=...       # credentials for the disposable account
 export BENCH_REGION=eu-west-1
 ```
 
-Each project is generated under `work/bmk-<tool>-<app>/` as a standalone Git repository with its own `package.json`,
-so the tool versions above are installed per project with `npm install`. Command logs go to `logs/`.
+**Serverless Framework** needs `SERVERLESS_ACCESS_KEY`, or `serverless login` once.
 
-### Stacktape built from source
-
-Build a release binary from a clean checkout of the Stacktape monorepo and point the benchmark at it:
+**Stacktape** needs a binary and the name of the AWS account connected in the Stacktape Console. Check that the name
+belongs to the same account as `AWS_PROFILE` with `stacktape info:whoami`.
 
 ```sh
-git -C ~/stacktape worktree add ~/stacktape-bench-cli origin/main --detach
-cd ~/stacktape-bench-cli
+export STACKTAPE_BIN=$(which stacktape)        # or a binary built from source, see below
+export STACKTAPE_AWS_ACCOUNT=<connection name>
+```
+
+To build Stacktape from source, as we do:
+
+```sh
+git clone https://github.com/stacktape/stacktape && cd stacktape
 pnpm install --frozen-lockfile
 pnpm turbo run build --filter=@stacktape/init-ui
 cd apps/cli
 bun scripts/build-dist-package.ts --platform linux --version 4.0.0-bench.$(git rev-parse --short HEAD) --keepUnarchived
-export STACKTAPE_BIN=$PWD/__dist/linux/stacktape
-export STACKTAPE_COMMIT=$(git rev-parse HEAD)
+export STACKTAPE_BIN=$PWD/__dist/linux/stacktape STACKTAPE_COMMIT=$(git rev-parse HEAD)
 ```
 
-Stacktape deploys into an AWS account connected in the Stacktape Console, using credentials the Console issues;
-it does not use `AWS_PROFILE` for that. Set `STACKTAPE_AWS_ACCOUNT` to the connection name of the same account that
-`AWS_PROFILE` points to. The runner refuses to deploy Stacktape without it. Check the account with
-`stacktape info:whoami` first: if the name is wrong, Stacktape deploys into the other account.
+Run a series. Tools are `stacktape`, `serverless`, `sst`, `cdk`, `cdk-hotswap`, `render`, `heroku` and `ravion`.
+Applications are `lambda-1`, `lambda-5`, `lambda-25`, `node`, `python` and `five-services`.
 
 ```sh
-export STACKTAPE_AWS_ACCOUNT=<connection name>
+node bench.mjs setup   sst lambda-5             # create the project and deploy it (not measured)
+node bench.mjs package sst lambda-5 --runs 10   # package from an empty build cache
+node bench.mjs package sst node --runs 10 --warm
+node bench.mjs deploy  sst lambda-5 --runs 10   # deploy a change from this machine
+node bench.mjs remove  sst lambda-5             # delete everything setup created
+node report.mjs                                 # median, fastest and slowest run of every series
 ```
 
-### Serverless Framework
-
-Set `SERVERLESS_ACCESS_KEY` (or run `serverless login` once). Serverless v4 requires it even for `package`.
-
-### Run a series
-
-```sh
-node bench.mjs setup   stacktape lambda-5            # create the project and deploy it (not timed)
-node bench.mjs package stacktape lambda-5 --runs 10   # packaging, clean build cache each run
-node bench.mjs deploy  stacktape lambda-5 --runs 10   # code change deployed from this machine
-node bench.mjs remove  stacktape lambda-5             # delete the stack
-node report.mjs                                       # median, min and max of every series
-```
-
-Tools are `stacktape`, `serverless`, `sst`, `cdk`, `cdk-hotswap`, `ravion`, `render` and `heroku`. Apps are
-`lambda-1`, `lambda-5`, `lambda-25`, `node`, `python` and `five-services`. `cdk-hotswap` shares nothing with `cdk`; it
-gets its own project and stack. SST's function packaging needs a deployed stage, so run `setup` before `package`.
-
-To spread changes in network and AWS load across tools, run one round of every tool before the next round:
+Each project is written to `work/bmk-<tool>-<app>/` as its own Git repository, with the tool installed from the
+project's `package.json`. Command logs are in `logs/`. SST's function packaging needs a deployed stage, so run `setup`
+first. To spread network and AWS variation evenly, run one round of every tool before the next round:
 
 ```sh
 for round in $(seq 10); do
@@ -174,49 +234,42 @@ for round in $(seq 10); do
 done
 ```
 
-### Git push journeys
+### Git push runs
 
-`node bench.mjs push <tool> <app> --runs 5` makes a change, commits it, pushes the project's `main` branch to its
-`origin` remote and times until the new code serves. Each run is a pair: a cold push with the build cache emptied,
-then a warm push 15 minutes after the cold one started serving. Before you start, create a GitHub repository for the
-project, add it as `origin` in `work/bmk-<tool>-<app>/`, push once, and connect the deploy service:
+`node bench.mjs push <tool> <app> --runs 5` commits a change, pushes `main` to the project's `origin` remote and
+measures until the new code answers. Each run is a pair: a first push with an empty build cache, then a second push
+15 minutes after the first one finished. Before you start, create a GitHub repository for the project, add it as
+`origin` in `work/bmk-<tool>-<app>/`, push once, and connect the deploy service:
 
-- **Serverless, SST, CDK:** the project contains `.github/workflows/deploy.yml`. It runs on a fresh GitHub-hosted
-  runner, restores npm's download cache, gets AWS credentials through OIDC and runs the CLI deploy. Add the
-  repository secrets `AWS_ROLE_ARN` (a role trusted for this repository through GitHub OIDC) and, for Serverless,
-  `SERVERLESS_ACCESS_KEY`. The cold run deletes the repository's Actions caches with `gh cache delete --all`.
-- **Stacktape:** connect the repository and branch in the Stacktape Console (GitOps). The Console runner keeps its
-  caches on an EBS volume and stops after 15 idle minutes, so the warm push starts a stopped runner. There is no
-  command that empties its caches: for a cold run, delete the project's runner in the Console, then pass
-  `--cold-reset manual`. The runner uses the Stacktape version configured in the Console, so publish the binary you
-  measure as a release first.
-- **Render:** create a Blueprint from the project's `render.yaml` in the Render dashboard and set `RENDER_API_KEY`.
-  Render has no way to empty a build cache without starting a deploy; for a cold run, use "Clear build cache &
-  deploy" on the previous commit, wait for it, then pass `--cold-reset manual`.
-- **Heroku:** run `heroku login` and `heroku plugins:install @heroku-cli/plugin-builds`. `setup` creates the apps
-  with `heroku create`. For the Git journey, connect each app to the GitHub repository in the Heroku dashboard and
-  enable automatic deploys. The cold run empties the build cache with `heroku builds:cache:purge`. Heroku's GitHub
-  integration builds only the repository root, so the five-service app has no Heroku Git push result.
-- **Ravion:** in the Ravion dashboard, connect the GitHub repository and the AWS account, add one web module per
-  service with its source directory and the default Railpack builder, and enable deploy on push. Set
-  `RAVION_URL_API` (and `RAVION_URL_REPORTING` and so on for five services) to the service URLs. Ravion has no
-  documented cache reset; pass `--cold-reset manual` after resetting it by hand.
+- **Serverless Framework, SST, AWS CDK:** the project contains `.github/workflows/deploy.yml`. Add the repository
+  secrets `AWS_ROLE_ARN` (a role this repository can assume through GitHub OIDC) and, for Serverless,
+  `SERVERLESS_ACCESS_KEY`. The first push of each pair deletes the repository's Actions caches with
+  `gh cache delete --all`.
+- **Stacktape:** connect the repository in the Stacktape Console. The runner uses the Stacktape version set in the
+  Console, so publish the binary you measure first. To empty its caches, delete the project's runner in the Console
+  and pass `--cold-reset manual`.
+- **Render:** create a Blueprint from the project's `render.yaml` and set `RENDER_API_KEY`. To empty the build cache,
+  use "Clear build cache & deploy" on the previous commit, wait for it, then pass `--cold-reset manual`.
+- **Heroku:** run `heroku login` and `heroku plugins:install @heroku-cli/plugin-builds`. `setup` creates the apps.
+  Connect each app to the GitHub repository and turn on automatic deploys. The first push of each pair empties the
+  build cache with `heroku builds:cache:purge`.
+- **Ravion:** connect the GitHub repository and the AWS account in Ravion, add one web module per service with the
+  default builder, and turn on deploy on push. Set `RAVION_URL_API` (and `RAVION_URL_REPORTING` and so on for five
+  services) to the service URLs. Reset the cache by hand and pass `--cold-reset manual`.
 
-## Files
+## Repository layout
 
 | Path | What it is |
 | --- | --- |
-| `bench.mjs` | The runner: setup, package, deploy, push and remove |
-| `lib.mjs` | The applications, the source edit, running commands, probes and the shared Dockerfile and workflow |
-| `tools/*.mjs` | One module per tool: its configuration, commands, artifacts and addresses |
-| `report.mjs` | Prints median, minimum and maximum per series |
-| `fixtures/` | The test applications |
-| `results/` | Measurements, one JSON object per run |
+| [`bench.mjs`](bench.mjs) | The runner: `setup`, `package`, `deploy`, `push` and `remove` |
+| [`lib.mjs`](lib.mjs) | The applications, the change, running commands, the probes, the shared Dockerfile and workflow |
+| [`tools/`](tools) | One module per tool: its configuration, commands, artifacts and addresses |
+| [`configs/`](configs) | The configuration files each tool gets, generated by `node configs.mjs` |
+| [`report.mjs`](report.mjs) | Prints the median, fastest and slowest run of every series |
+| [`fixtures/`](fixtures) | The test applications |
 
-## Limits
+## Think a tool is set up badly?
 
-- Each tool is measured with its own default deploy path, so the rollout guarantees differ. CDK and Serverless go
-  through CloudFormation; Stacktape and CDK hotswap update code directly; SST uses Pulumi.
-- A service counts as serving the new code at the first response with the new revision. During a rolling update,
-  later responses can still come from an old task for a short time.
-- Results from one machine, region and day are not a general ranking of the tools.
+We want each tool to look the way its users would set it up. If a configuration here is worse than what you would
+use, or a measurement favors one tool, please open an issue in this repository. Tell us what you would change and,
+if you can, link the documentation that supports it. We will rerun the affected tests.

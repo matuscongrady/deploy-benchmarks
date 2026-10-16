@@ -2,7 +2,7 @@
 // Git push journey: the shared GitHub Actions workflow. (SST's own Autodeploy needs an SST Console account.)
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { capture, dockerBuild, dockerfile, findFunctions, imageBytes, REGION, serviceDir, STAGE } from '../lib.mjs';
+import { BASE_IMAGES, capture, dockerBuild, dockerfile, findFunctions, imageBytes, REGION, serviceDir, STAGE } from '../lib.mjs';
 
 const sst = ['npx', 'sst'];
 const pascal = (s) => s.replace(/(^|-)(.)/g, (_, __, c) => c.toUpperCase());
@@ -51,6 +51,8 @@ export default {
   },
   version: ({ dir }) => capture([...sst, 'version'], dir).split(' ').pop(),
   setup: () => [[...sst, 'install']],
+  // The image the Dockerfile starts from; it stays pulled between clean builds, like every tool's base images.
+  baseImages: ({ app }) => (app.kind === 'service' ? [BASE_IMAGES[app.language]] : []),
   buildOutputs: ['.sst/artifacts'],
   // SST has no packaging-only command. `sst diff` on a deployed stage builds and zips every function, then compares
   // the plan with the deployed state, so its time includes reading that state from AWS.

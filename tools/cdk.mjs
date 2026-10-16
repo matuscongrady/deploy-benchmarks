@@ -2,7 +2,7 @@
 // Git push journey: the shared GitHub Actions workflow.
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { capture, dockerBuild, dockerfile, imageBytes, REGION, serviceDir, stackOutputs, zipSize } from '../lib.mjs';
+import { BASE_IMAGES, capture, dockerBuild, dockerfile, imageBytes, REGION, serviceDir, stackOutputs, zipSize } from '../lib.mjs';
 
 const cdk = ['npx', 'cdk'];
 
@@ -57,6 +57,8 @@ export default {
   version: ({ dir }) => capture([...cdk, '--version'], dir).split(' ')[0],
   // `cdk bootstrap` prepares the account and region once.
   setup: () => [[...cdk, 'bootstrap']],
+  // The image the Dockerfile starts from; it stays pulled between clean builds, like every tool's base images.
+  baseImages: ({ app }) => (app.kind === 'service' ? [BASE_IMAGES[app.language]] : []),
   buildOutputs: ['cdk.out'],
   // `cdk synth` bundles each function into cdk.out. CDK zips the asset directories later, during `cdk deploy`, so
   // zipping is not in CDK's packaging time; the upload size zips each directory at zlib's default level, as CDK does.

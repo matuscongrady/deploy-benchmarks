@@ -1,0 +1,63 @@
+service: bmk-serverless-lambda-25
+frameworkVersion: '4.44.0'
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: eu-west-1
+  memorySize: 512
+  timeout: 30
+build:
+  esbuild:
+    external:
+      - pdfkit
+functions:
+  report:
+    handler: handlers/report.handler
+  product-lookup:
+    handler: handlers/product-lookup.handler
+  cart-pricing:
+    handler: handlers/cart-pricing.handler
+  create-order:
+    handler: handlers/create-order.handler
+  notification:
+    handler: handlers/notification.handler
+  product-search:
+    handler: handlers/product-search.handler
+  category-list:
+    handler: handlers/category-list.handler
+  inventory-check:
+    handler: handlers/inventory-check.handler
+  reserve-stock:
+    handler: handlers/reserve-stock.handler
+  release-stock:
+    handler: handlers/release-stock.handler
+  shipping-quote:
+    handler: handlers/shipping-quote.handler
+  tax-quote:
+    handler: handlers/tax-quote.handler
+  apply-discount:
+    handler: handlers/apply-discount.handler
+  payment-intent:
+    handler: handlers/payment-intent.handler
+  payment-webhook:
+    handler: handlers/payment-webhook.handler
+  order-status:
+    handler: handlers/order-status.handler
+  cancel-order:
+    handler: handlers/cancel-order.handler
+  return-request:
+    handler: handlers/return-request.handler
+  customer-profile:
+    handler: handlers/customer-profile.handler
+  customer-token:
+    handler: handlers/customer-token.handler
+  invoice:
+    handler: handlers/invoice.handler
+  catalog-import:
+    handler: handlers/catalog-import.handler
+  catalog-feed:
+    handler: handlers/catalog-feed.handler
+  daily-summary:
+    handler: handlers/daily-summary.handler
+  shipment-update:
+    handler: handlers/shipment-update.handler

@@ -8,8 +8,9 @@ const VERSION = '4.44.0';
 const sls = ['npx', 'serverless'];
 const common = ['--stage', STAGE, '--region', REGION];
 
-// No `build` or `package` section. For JavaScript handlers the default is one ZIP of the project, with its
-// production node_modules, shared by every function. Serverless bundles with esbuild by default only for TypeScript.
+// Most Serverless projects bundle their functions, usually with esbuild (see README.md), so `build.esbuild` turns on
+// v4's built-in esbuild bundling with its default options. PDFKit reads its font files from disk, so it is listed in
+// `external`: Serverless then installs it into the package instead of bundling it.
 const config = ({ app, name }) => `service: ${name}
 frameworkVersion: '${VERSION}'
 provider:
@@ -18,6 +19,10 @@ provider:
   region: ${REGION}
   memorySize: 512
   timeout: 30
+build:
+  esbuild:
+    external:
+      - pdfkit
 functions:
 ${app.functions.map((fn) => `  ${fn}:\n    handler: handlers/${fn}.handler`).join('\n')}
 `;

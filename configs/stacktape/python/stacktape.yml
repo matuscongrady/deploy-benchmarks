@@ -1,0 +1,28 @@
+{
+  "projectName": "bmk-stacktape-python",
+  "resources": {
+    "api": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "buildpack",
+          "properties": {
+            "sourceDirectoryPath": "."
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    }
+  },
+  "stackConfig": {
+    "outputs": [
+      {
+        "name": "apiUrl",
+        "value": "$ResourceParam('api', 'url')"
+      }
+    ]
+  }
+}

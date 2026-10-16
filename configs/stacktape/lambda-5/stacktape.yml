@@ -1,0 +1,75 @@
+{
+  "projectName": "bmk-stacktape-lambda-5",
+  "resources": {
+    "report": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/report.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "productLookup": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/product-lookup.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "cartPricing": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/cart-pricing.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "createOrder": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/create-order.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "notification": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "handlers/notification.mjs"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    }
+  }
+}

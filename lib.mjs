@@ -115,14 +115,20 @@ export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const lambda = new LambdaClient({ region: REGION });
 
-/** Finds the deployed name of each function by listing functions whose names start with `prefix`. */
-export async function findFunctions(prefix, functions) {
+/** Names of the deployed functions that start with `prefix`. */
+export async function functionNames(prefix) {
   const names = [];
   for (let Marker; ; ) {
     const page = await lambda.send(new ListFunctionsCommand({ Marker }));
     names.push(...page.Functions.map((f) => f.FunctionName).filter((n) => n.startsWith(prefix)));
     if (!(Marker = page.NextMarker)) break;
   }
+  return names;
+}
+
+/** Finds the deployed name of each function by listing functions whose names start with `prefix`. */
+export async function findFunctions(prefix, functions) {
+  const names = await functionNames(prefix);
   const squash = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
   return Object.fromEntries(
     functions.map((fn) => {
@@ -227,13 +233,16 @@ export function record(file, entry) {
   appendFileSync(join(ROOT, 'results', file), `${JSON.stringify(entry)}\n`);
 }
 
+/** Base images of the Dockerfiles below. */
+export const BASE_IMAGES = { node: 'node:22-slim', python: 'python:3.11-slim' };
+
 /**
  * The Dockerfile SST and CDK build for a service: the official slim image, a locked production install, then the
  * source. Both tools require a Dockerfile; Stacktape and the hosted platforms build without one.
  */
 export function dockerfile(app, service) {
   const dir = serviceDir(app, service);
-  const node = `FROM node:22-slim
+  const node = `FROM ${BASE_IMAGES.node}
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
@@ -241,7 +250,7 @@ COPY . .
 ENV NODE_ENV=production PORT=3000
 CMD ["node", "server.mjs"]
 `;
-  const python = `FROM python:3.11-slim
+  const python = `FROM ${BASE_IMAGES.python}
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
