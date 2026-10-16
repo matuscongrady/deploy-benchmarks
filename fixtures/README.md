@@ -9,7 +9,7 @@ The tests measure building and updating an application. They do not measure data
 Each application has a check that runs its business logic without any cloud account:
 
 ```sh
-cd fixtures/lambdas && npm ci && node check.mjs
+cd fixtures/lambdas && npm ci && npm run check
 cd fixtures/containers/node && npm ci && node check.mjs
 cd fixtures/containers/python && uv venv --python 3.11.14 .venv && uv pip install --python .venv/bin/python --require-hashes -r requirements-check.txt && .venv/bin/python check.py
 ```
@@ -18,51 +18,100 @@ The benchmark runner does not run these checks. It checks the deployed applicati
 
 ## Lambda applications
 
-`lambdas/workloads.json` selects the functions. `lambdas/workload-locks/<app>/` holds the `package.json` and lockfile of each Lambda application, with only the dependencies its functions import. Each file exports `handler(event)` and returns a JSON object containing its revision.
+`lambdas/` is the backend of a small online shop, set up the way many teams build a Lambda backend: an npm
+workspace with one package of functions and two shared packages that nearly every function imports.
+
+| Package | What it holds |
+| --- | --- |
+| `packages/util` | Logging (pino), errors, date helpers (date-fns, date-fns-tz), retries (p-retry), concurrency (p-map), validation (zod) |
+| `packages/service` | The database layer (Prisma with `@prisma/adapter-pg` and `pg`), the AWS clients (SQS, S3, EventBridge, Secrets Manager), API tokens (jose), and the clients of the outside services: Stripe, Slack, Google Sheets, OpenAI and email (Nodemailer) |
+| `packages/functions` | 25 handlers in `src/handlers/`: 4 HTTP APIs, 13 SQS queue workers and 8 scheduled jobs |
+
+`packages/service` exports everything from one entry point and creates its clients once per Lambda container, as most
+backends do. Every function therefore bundles the whole service package, including every SDK, even when it uses only
+one client. That is what makes the 25-function application heavy, and it is the case shared layers and per-function
+bundling handle differently.
+
+`prisma generate` runs on `npm ci` (a `postinstall` script of `packages/service`) and writes the Prisma client to
+`packages/service/src/generated/`. It runs for every tool during setup and is not timed.
+
+The three Lambda applications are the same project with a different set of handlers:
 
 | Application | Functions | Code edit for a rebuild or deployment |
 | --- | --- | --- |
-| 1 function | Sales report | Change the reporting revision file |
-| 5 functions | Sales report, product lookup, cart pricing, order creation and notification | Change all five revision files |
-| 25 functions | The five above, plus search, categories, stock, shipping, tax, discounts, payments, fulfillment and customer functions | Change all 25 revision files |
+| 1 function | `sales-report` | Its revision file |
+| 5 functions | `create-order`, `payment-capture`, `order-confirmation-email`, `fulfilment-dispatch`, `sales-report`: one API, three workers and one scheduled job | All five revision files, or the shared service package |
+| 25 functions | All handlers below | All 25 revision files, or the shared service package |
 
-The sales report builds a PDF, an Excel workbook and a Word document from the same order. It imports PDFKit, ExcelJS and docx and uses all three. This represents a dependency-heavy business function. The four other functions in the small application validate product requests, calculate money with Decimal.js, create a repeatable order identifier and render an email with Handlebars.
+| Handler | Trigger | Work performed |
+| --- | --- | --- |
+| `create-order` | API | Authenticate the customer's token, create the order and queue its payment capture |
+| `get-order` | API | Return one of the customer's orders with its lines and shipment |
+| `list-products` | API | List the catalog, optionally by category |
+| `stripe-webhook` | API | Verify the Stripe signature of a payment event and mark the order paid |
+| `order-confirmation-email` | SQS | Compose the confirmation email for an order |
+| `payment-capture` | SQS | Build the Stripe capture request and the order event |
+| `inventory-reservation` | SQS | Check stock for each order line |
+| `fulfilment-dispatch` | SQS | Create the shipment and queue the delivery notification |
+| `refund-processor` | SQS | Build a Stripe refund and update the order |
+| `return-request` | SQS | Check a return against the 30-day window and notify the team on Slack |
+| `review-moderation` | SQS | Build the OpenAI moderation request for a product review |
+| `product-description` | SQS | Build the OpenAI request for a product description |
+| `loyalty-points` | SQS | Calculate the points an order earns |
+| `fraud-check` | SQS | Score an order and emit the result as an event |
+| `invoice-email` | SQS | Compose the invoice email |
+| `customer-sync` | SQS | Build the Google Sheets row for a customer |
+| `delivery-notification` | SQS | Compose the delivery email and the Slack message |
+| `sales-report` | Schedule | Build the day's sales report as a PDF, an Excel workbook and a Word document (PDFKit, ExcelJS, docx) |
+| `shipment-tracking-sync` | Schedule | Mark shipments in transit as delivered |
+| `low-stock-alert` | Schedule | Post the products low on stock to Slack |
+| `daily-sales-summary` | Schedule | Total the day's orders and build the Google Sheets row |
+| `abandoned-cart-reminder` | Schedule | Compose a reminder for pending orders older than a day |
+| `product-feed-export` | Schedule | Export the catalog as CSV for marketplaces |
+| `supplier-reorder` | Schedule | Queue a reorder for each product low on stock |
+| `data-retention-cleanup` | Schedule | Find shipments delivered more than 90 days ago |
 
-The larger application has these 25 handlers:
+**No outside services.** The functions build every request they would send (to SQS, S3, EventBridge, Stripe, Slack,
+Google, OpenAI or the mail server) and return it instead of sending it. The database is the one exception: the
+`pg` pool in `packages/service/src/fixture-database.ts` answers Prisma's SQL from the in-memory tables in
+`sample-data.ts`, so Prisma, its driver adapter and `pg` run their real code without a PostgreSQL server. Writes are
+returned but not kept, so repeated calls give the same answer. These two files exist only for the benchmark. The
+tokens and keys in the source (`sk_test_fixture_only` and similar) are placeholders, not credentials.
 
-| File in `lambdas/handlers/` | Work performed |
-| --- | --- |
-| `report.mjs` | Generate PDF, Excel and Word sales reports |
-| `product-lookup.mjs` | Validate a product ID and return catalog details |
-| `cart-pricing.mjs` | Validate lines and calculate the cart total |
-| `create-order.mjs` | Validate an order and calculate its ID and total |
-| `notification.mjs` | Validate a recipient and render an order email |
-| `product-search.mjs` | Search product names |
-| `category-list.mjs` | Return distinct catalog categories |
-| `inventory-check.mjs` | Check whether requested stock is available |
-| `reserve-stock.mjs` | Validate a reservation and calculate remaining stock |
-| `release-stock.mjs` | Validate a stock-release request |
-| `shipping-quote.mjs` | Calculate shipping for a destination and weight |
-| `tax-quote.mjs` | Calculate tax for a regional rate |
-| `apply-discount.mjs` | Apply a coupon using decimal arithmetic |
-| `payment-intent.mjs` | Validate a payment request and calculate its idempotency ID |
-| `payment-webhook.mjs` | Verify an HMAC signature before accepting a payment event |
-| `order-status.mjs` | Look up an order status |
-| `cancel-order.mjs` | Decide whether an order can be cancelled |
-| `return-request.mjs` | Check a return against a 30-day window |
-| `customer-profile.mjs` | Normalize an email and escape a customer name |
-| `customer-token.mjs` | Sign and verify a customer JWT |
-| `invoice.mjs` | Render an HTML invoice |
-| `catalog-import.mjs` | Parse and validate a CSV product import |
-| `catalog-feed.mjs` | Generate an XML catalog |
-| `daily-summary.mjs` | Aggregate sales for a date |
-| `shipment-update.mjs` | Parse and validate a carrier's XML update |
+**Libraries.** We picked the most downloaded package for each job, unless a backend like this one usually uses
+another. Downloads from npm for 13 September to 12 October 2026:
 
-The public fixture signing string is not a credential. Do not replace it with a real secret.
+| Job | Chosen | Downloads | Alternatives |
+| --- | --- | --- | --- |
+| Validation | zod | 1,432 M | joi 118 M |
+| IDs | uuid | 1,353 M | nanoid 1,191 M |
+| API tokens | jose | 645 M | jsonwebtoken 265 M |
+| Dates | date-fns, date-fns-tz | 454 M, 49 M | dayjs 331 M |
+| Concurrency, retries | p-map, p-retry | 365 M, 249 M | |
+| Logging | pino | 234 M | winston 124 M |
+| Database driver | pg | 268 M | |
+| ORM | Prisma (`@prisma/client`, `@prisma/adapter-pg`) | 78 M, 28 M | drizzle-orm 115 M, kysely 84 M, typeorm 24 M |
+| AWS | `@aws-sdk/client-s3`, `-secrets-manager`, `-sqs`, `-eventbridge` | 212 M, 58 M, 55 M, 15 M | |
+| AI | openai | 186 M | |
+| Email | nodemailer | 109 M | resend 55 M |
+| Payments | stripe | 101 M | |
+| Chat | `@slack/web-api` | 62 M | |
+| Spreadsheets | `@googleapis/sheets` | 7 M | googleapis 48 M |
+| Documents | exceljs, pdfkit, docx | 75 M, 43 M, 29 M | |
 
-Each handler has its own revision file. The standard update changes every function in the selected application, so deployment timings cover the whole application. All functions must return the new revision. Keeping the files separate also permits a separately labelled single-function edit without changing shared source.
+Two choices are not the most downloaded: Prisma, because it is the ORM of the backends this one is modelled on, and
+`@googleapis/sheets`, the per-API package Google recommends over the full `googleapis` package (about 250 MB
+installed).
 
-Default invocation input is `{}`. The sample order contains two coffees at USD 12.50 and one mug at USD 8.00. Cart pricing returns `subtotal: "33.00"`. Reporting returns the same total and the sizes and signatures of all three generated files. The PDF starts with `%PDF`; Excel and Word documents start with `PK` because they are ZIP-based formats. The check also verifies that each file contains more than 1 KB of output.
+**Business check.** `npm run check` calls every handler with the input the benchmark sends after a deploy (`{}`, so
+each handler uses its sample request) and compares the result with `manifest.json`. The sample order has two coffees
+at USD 12.50 and one mug at USD 8.00, so order totals are `33.00`. The sales report must contain a PDF (`%PDF`), an
+Excel workbook and a Word document (both `PK`, as ZIP-based formats), each larger than 1 KB.
+
+**Revisions.** Every handler has a revision file (`create-order.revision.ts`) and reports its value as `revision`.
+`packages/service/src/orders.ts` has `serviceRevision`, which every response also reports. The standard change edits
+each handler's revision file. The shared change (`--change shared`) edits only `orders.ts`, which every function
+imports, so every function must be rebuilt and redeployed.
 
 ## One-container applications
 

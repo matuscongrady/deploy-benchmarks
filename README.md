@@ -25,9 +25,12 @@ Each cell will show the median of ten runs, with the fastest and slowest run. Th
 
 ## What we measured
 
-We use small commerce applications whose code does real work. One function builds a PDF, an Excel workbook and a
-Word document; others price carts, verify webhook signatures or parse CSV files. They are described in
-[`fixtures/README.md`](fixtures/README.md).
+The Lambda applications are the backend of a small online shop, built like many real Lambda backends: an npm
+workspace whose functions all import a shared `service` package (Prisma with PostgreSQL, the AWS SDK, Stripe, Slack,
+Google Sheets, OpenAI, email) and a shared `util` package. Most functions are queue workers and scheduled jobs; four
+are HTTP APIs; one builds a PDF, an Excel workbook and a Word document. The 1- and 5-function applications are
+subsets of the 25-function one. The container applications are small commerce APIs whose code does real work. All
+of them are described in [`fixtures/README.md`](fixtures/README.md).
 
 | Test | Applications | Tools |
 | --- | --- | --- |
@@ -38,13 +41,18 @@ Word document; others price carts, verify webhook signatures or parse CSV files.
 | Deploy a change by Git push, 15 minutes later | same as the first push | every tool |
 
 In the five-service application, the change edits three services. The other two must keep running their old code.
+The Lambda applications have a second deploy test, the shared change: it edits a module of the shared `service`
+package, which every function imports, so every function must be rebuilt.
 
 ## How a run works
 
 **The change.** Every function and service has a small revision file, for example
-[`handlers/report.revision.mjs`](fixtures/lambdas/handlers/report.revision.mjs). A deploy run writes a new revision
-string into the revision file of every changed function or service. Every response from the applications contains
-the revision of the code that produced it. All tools get the same change.
+[`create-order.revision.ts`](fixtures/lambdas/packages/functions/src/handlers/create-order.revision.ts). A deploy run
+writes a new revision string into the revision file of every changed function or service. Every response from the
+applications contains the revision of the code that produced it. All tools get the same change. The shared change
+(`--change shared`) instead edits `serviceRevision` in
+[`packages/service/src/orders.ts`](fixtures/lambdas/packages/service/src/orders.ts), which every Lambda response
+reports.
 
 **When a deploy counts as done.** The clock starts when the deploy command starts. For a Git push, it starts when
 `git push` returns. The clock stops when every changed function or service has returned the new revision. Functions
@@ -90,6 +98,8 @@ modules in [`tools/`](tools).
 
 - Configuration: [`configs/serverless/`](configs/serverless), written by [`tools/serverless.mjs`](tools/serverless.mjs).
 - Packaging: `serverless package`. Deploy: `serverless deploy`.
+- The Serverless service is the monorepo's `packages/functions` package, where its `serverless.yml` lives. That is
+  the usual layout, and Serverless installs `external` packages at the versions in that package's `package.json`.
 - Version 4 with its built-in esbuild bundling (`build.esbuild`), with esbuild's default options. Without that
   setting, version 4 bundles only TypeScript handlers. We turned it on because most Serverless projects bundle their
   code. In the last month, the [`serverless`](https://www.npmjs.com/package/serverless) package had 5.9 million
@@ -154,16 +164,23 @@ modules in [`tools/`](tools).
 
 | What | Tools | Why |
 | --- | --- | --- |
-| Keep `pdfkit` out of the bundle and install it as a package: `build.esbuild.external` (Serverless), `nodejs.install` (SST), `bundling.nodeModules` (CDK) | Serverless Framework, SST, AWS CDK | PDFKit reads its font files from disk. Bundled, the report function fails with `ENOENT ... Helvetica.afm`. We checked that each of these tools fails without the setting. Stacktape detects such packages itself. |
+| Keep `pdfkit` out of the bundle and install it as a package: `build.esbuild.external` (Serverless), `nodejs.install` (SST), `bundling.nodeModules` (CDK) | Serverless Framework, SST, AWS CDK | PDFKit reads its font files from disk. Bundled, the sales report fails with `ENOENT ... Helvetica.afm`. We checked that each of these tools fails without the setting. Stacktape detects such packages itself. Serverless applies `external` to every function, so each function's ZIP contains PDFKit. |
+| `package.individually: true` | Serverless Framework | By default all functions share one ZIP. For 25 functions that ZIP holds every bundle and source map, over 600 MB unpacked; Lambda accepts at most 250 MB. |
+| An esbuild `banner` that defines `require` | Serverless Framework | Serverless bundles this ES module project to an ES module, where CommonJS dependencies (ExcelJS, among others) cannot `require` Node.js built-ins. The banner is the fix in [Serverless's build guide](https://www.serverless.com/framework/docs/providers/aws/guide/building). CDK and Stacktape emit CommonJS. |
 | Load balancer health check path `/health` | SST, AWS CDK | The default path `/` returns 404 in these applications, so the services would never become healthy. |
 | A Dockerfile | SST, AWS CDK | Both need one to build a container. Stacktape, Render, Heroku and Ravion build from the source. |
 | `--awsAccount` | Stacktape | Stacktape deploys with credentials from the Stacktape Console for a connected AWS account, not with `AWS_PROFILE`. |
 
+**Left at each tool's default:** the AWS SDK and Prisma. Stacktape, Serverless Framework and AWS CDK all leave
+`@aws-sdk/*` out of the bundle, because the Node.js 22 Lambda runtime provides it, and bundle Prisma's client, whose
+query compiler is plain JavaScript and WebAssembly in Prisma 7. `prisma generate` runs on `npm ci` for every tool.
+
 ## Known limitations
 
 - **Stacktape is not the fastest or smallest everywhere.** In our local test runs, AWS CDK's Lambda uploads were
-  smaller at every size, partly because CDK uploads no source maps by default. Serverless Framework's upload was
-  smaller for 5 functions. The plain Dockerfile that SST and CDK build produced both container images faster than
+  smaller for 1 and 5 functions, partly because CDK uploads no source maps by default. Stacktape's uploads also
+  contain TypeScript (about 10 MB compressed): Prisma lists it as an optional peer dependency, and Stacktape installs
+  it next to PDFKit. The plain Dockerfile that SST and CDK build produced both container images faster than
   Stacktape, from an empty build cache and after a source change. The published results will show every case where
   Stacktape loses.
 - **The tools roll out changes differently.** Serverless Framework and AWS CDK go through CloudFormation. Stacktape

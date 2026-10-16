@@ -1,32 +1,34 @@
+// Runs every function with its test input and checks the result against ../manifest.json. Needs no accounts and no
+// database: the service package answers from sample data. Run with `npm run check` after `npm ci`.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const workloads = JSON.parse(await readFile(new URL('./workloads.json', import.meta.url)));
+
+process.env.LOG_LEVEL ??= 'warn';
 const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url)));
-const names = [...new Set(Object.values(workloads).flatMap(w=>Object.keys(w.entrypoints)))];
-function contains(actual, expected) {
-  if (Array.isArray(expected)) return Array.isArray(actual) && actual.length===expected.length && expected.every((v,i)=>contains(actual[i],v));
-  if (expected && typeof expected==='object') return actual && Object.entries(expected).every(([key,value])=>contains(actual[key],value));
-  return actual===expected;
+const contains = (actual, want) =>
+  Array.isArray(want)
+    ? Array.isArray(actual) && actual.length === want.length && want.every((v, i) => contains(actual[i], v))
+    : want && typeof want === 'object'
+      ? actual && Object.entries(want).every(([k, v]) => contains(actual[k], v))
+      : actual === want;
+
+for (const fn of manifest.lambda.functions) {
+  const { handler } = await import(new URL(`packages/functions/src/handlers/${fn.name}.ts`, import.meta.url));
+  let result = await handler(fn.probe.input);
+  if (typeof result?.body === 'string') {
+    assert.equal(result.statusCode, 200, `${fn.name}: ${result.body}`);
+    result = JSON.parse(result.body);
+  }
+  if (Array.isArray(result.results)) result = { ...result, ...result.results[0] };
+  assert.equal(result.revision, 'baseline', `${fn.name}: revision`);
+  assert.equal(result.serviceRevision, 'baseline', `${fn.name}: serviceRevision`);
+  assert.ok(contains(result, fn.probe.expected), `${fn.name}: unexpected result ${JSON.stringify(result)}`);
 }
-const results = {};
-for (const name of names) {
-  const spec = manifest.lambda.functions.find(f=>f.name===name);
-  const { handler } = await import(new URL(`handlers/${name}.mjs`, import.meta.url));
-  const result = await handler(spec.probe.input);
-  assert.equal(typeof result.revision, 'string');
-  assert.ok(contains(result,spec.probe.expected),`Business result failed for ${name}`);
-  results[name] = result;
-}
-if (results.report) {
-  assert.deepEqual(results.report.files.map(f=>f.prefix), ['%PDF','PK','PK']);
-  assert.ok(results.report.files.every(f=>f.bytes>1000));
-}
-if (results['payment-webhook']) {
-  const { handler } = await import('./handlers/payment-webhook.mjs');
-  await assert.rejects(handler({ signature:'bad' }), /Invalid signature/);
-}
-if (results['cart-pricing']) {
-  const { handler } = await import('./handlers/cart-pricing.mjs');
-  await assert.rejects(handler({ lines:[{productId:'coffee',quantity:-1}] }));
-}
-console.log(`Verified ${names.length} selected functions and their business results.`);
+
+// Invalid input is rejected rather than processed.
+const { handler: createOrder } = await import('./packages/functions/src/handlers/create-order.ts');
+assert.equal((await createOrder({ body: JSON.stringify({ requestId: 'r', lines: [] }) })).statusCode, 400);
+const { handler: capture } = await import('./packages/functions/src/handlers/payment-capture.ts');
+assert.equal((await capture({ Records: [{ messageId: 'm1', body: '{}' }] })).batchItemFailures.length, 1);
+console.log(`Checked ${manifest.lambda.functions.length} functions and their business results.`);
+process.exit(0);

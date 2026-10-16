@@ -4,8 +4,8 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 
 const app = new App();
 const stack = new Stack(app, 'bmk-cdk-lambda-5', { env: { region: 'eu-west-1' } });
-new NodejsFunction(stack, 'report', { entry: 'handlers/report.mjs', functionName: 'bmk-cdk-lambda-5-report', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30), bundling: { nodeModules: ['pdfkit'] } });
-new NodejsFunction(stack, 'product-lookup', { entry: 'handlers/product-lookup.mjs', functionName: 'bmk-cdk-lambda-5-product-lookup', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
-new NodejsFunction(stack, 'cart-pricing', { entry: 'handlers/cart-pricing.mjs', functionName: 'bmk-cdk-lambda-5-cart-pricing', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
-new NodejsFunction(stack, 'create-order', { entry: 'handlers/create-order.mjs', functionName: 'bmk-cdk-lambda-5-create-order', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
-new NodejsFunction(stack, 'notification', { entry: 'handlers/notification.mjs', functionName: 'bmk-cdk-lambda-5-notification', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
+new NodejsFunction(stack, 'create-order', { entry: 'packages/functions/src/handlers/create-order.ts', functionName: 'bmk-cdk-lambda-5-create-order', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
+new NodejsFunction(stack, 'payment-capture', { entry: 'packages/functions/src/handlers/payment-capture.ts', functionName: 'bmk-cdk-lambda-5-payment-capture', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
+new NodejsFunction(stack, 'order-confirmation-email', { entry: 'packages/functions/src/handlers/order-confirmation-email.ts', functionName: 'bmk-cdk-lambda-5-order-confirmation-email', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
+new NodejsFunction(stack, 'fulfilment-dispatch', { entry: 'packages/functions/src/handlers/fulfilment-dispatch.ts', functionName: 'bmk-cdk-lambda-5-fulfilment-dispatch', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30) });
+new NodejsFunction(stack, 'sales-report', { entry: 'packages/functions/src/handlers/sales-report.ts', functionName: 'bmk-cdk-lambda-5-sales-report', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30), bundling: { nodeModules: ['pdfkit'] } });

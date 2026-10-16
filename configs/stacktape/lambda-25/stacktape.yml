@@ -1,55 +1,13 @@
 {
   "projectName": "bmk-stacktape-lambda-25",
   "resources": {
-    "report": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/report.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "productLookup": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/product-lookup.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "cartPricing": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/cart-pricing.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
     "createOrder": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/create-order.mjs"
+            "entryfilePath": "packages/functions/src/handlers/create-order.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -57,13 +15,13 @@
         "timeout": 30
       }
     },
-    "notification": {
+    "getOrder": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/notification.mjs"
+            "entryfilePath": "packages/functions/src/handlers/get-order.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -71,13 +29,13 @@
         "timeout": 30
       }
     },
-    "productSearch": {
+    "listProducts": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/product-search.mjs"
+            "entryfilePath": "packages/functions/src/handlers/list-products.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -85,13 +43,13 @@
         "timeout": 30
       }
     },
-    "categoryList": {
+    "stripeWebhook": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/category-list.mjs"
+            "entryfilePath": "packages/functions/src/handlers/stripe-webhook.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -99,13 +57,13 @@
         "timeout": 30
       }
     },
-    "inventoryCheck": {
+    "orderConfirmationEmail": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/inventory-check.mjs"
+            "entryfilePath": "packages/functions/src/handlers/order-confirmation-email.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -113,13 +71,13 @@
         "timeout": 30
       }
     },
-    "reserveStock": {
+    "paymentCapture": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/reserve-stock.mjs"
+            "entryfilePath": "packages/functions/src/handlers/payment-capture.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -127,13 +85,13 @@
         "timeout": 30
       }
     },
-    "releaseStock": {
+    "inventoryReservation": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/release-stock.mjs"
+            "entryfilePath": "packages/functions/src/handlers/inventory-reservation.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -141,13 +99,13 @@
         "timeout": 30
       }
     },
-    "shippingQuote": {
+    "fulfilmentDispatch": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/shipping-quote.mjs"
+            "entryfilePath": "packages/functions/src/handlers/fulfilment-dispatch.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -155,83 +113,13 @@
         "timeout": 30
       }
     },
-    "taxQuote": {
+    "refundProcessor": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/tax-quote.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "applyDiscount": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/apply-discount.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "paymentIntent": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/payment-intent.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "paymentWebhook": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/payment-webhook.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "orderStatus": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/order-status.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "cancelOrder": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/cancel-order.mjs"
+            "entryfilePath": "packages/functions/src/handlers/refund-processor.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -245,7 +133,7 @@
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/return-request.mjs"
+            "entryfilePath": "packages/functions/src/handlers/return-request.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -253,13 +141,13 @@
         "timeout": 30
       }
     },
-    "customerProfile": {
+    "reviewModeration": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/customer-profile.mjs"
+            "entryfilePath": "packages/functions/src/handlers/review-moderation.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -267,13 +155,13 @@
         "timeout": 30
       }
     },
-    "customerToken": {
+    "productDescription": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/customer-token.mjs"
+            "entryfilePath": "packages/functions/src/handlers/product-description.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -281,13 +169,13 @@
         "timeout": 30
       }
     },
-    "invoice": {
+    "loyaltyPoints": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/invoice.mjs"
+            "entryfilePath": "packages/functions/src/handlers/loyalty-points.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -295,13 +183,13 @@
         "timeout": 30
       }
     },
-    "catalogImport": {
+    "fraudCheck": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/catalog-import.mjs"
+            "entryfilePath": "packages/functions/src/handlers/fraud-check.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -309,13 +197,13 @@
         "timeout": 30
       }
     },
-    "catalogFeed": {
+    "invoiceEmail": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/catalog-feed.mjs"
+            "entryfilePath": "packages/functions/src/handlers/invoice-email.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -323,13 +211,13 @@
         "timeout": 30
       }
     },
-    "dailySummary": {
+    "customerSync": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/daily-summary.mjs"
+            "entryfilePath": "packages/functions/src/handlers/customer-sync.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -337,13 +225,125 @@
         "timeout": 30
       }
     },
-    "shipmentUpdate": {
+    "deliveryNotification": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/shipment-update.mjs"
+            "entryfilePath": "packages/functions/src/handlers/delivery-notification.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "salesReport": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/sales-report.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "shipmentTrackingSync": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/shipment-tracking-sync.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "lowStockAlert": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/low-stock-alert.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "dailySalesSummary": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/daily-sales-summary.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "abandonedCartReminder": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/abandoned-cart-reminder.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "productFeedExport": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/product-feed-export.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "supplierReorder": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/supplier-reorder.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "dataRetentionCleanup": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/data-retention-cleanup.ts"
           }
         },
         "runtime": "nodejs22.x",

@@ -4,18 +4,24 @@
 //   node bench.mjs package <tool> <app> [--runs 5] [--warm]  package from a clean (or warm) build cache
 //   node bench.mjs deploy  <tool> <app> [--runs 5]           deploy a code change from this machine
 //   node bench.mjs push    <tool> <app> [--runs 5]           push a code change: cold, then warm 15 minutes later
+//   deploy and push take --change shared to change the shared service package (packages/service/src/orders.ts) instead of each handler (Lambda apps)
 //   node bench.mjs remove  <tool> <app>                      delete what setup created
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  APPS, businessOk, call, copyAppSource, editSource, fileSize, functionNames, githubWorkflow, machine, readRevision, record, ROOT,
+  APPS, businessOk, call, copyAppSource, describeChange, editSource, fileSize, functionNames, githubWorkflow, machine, readRevision, record, ROOT,
   run, sleep, targetNames, waitForRevisions
 } from './lib.mjs';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { runs: { type: 'string', default: '5' }, warm: { type: 'boolean', default: false }, 'cold-reset': { type: 'string' } }
+  options: {
+    runs: { type: 'string', default: '5' },
+    warm: { type: 'boolean', default: false },
+    change: { type: 'string', default: 'handlers' },
+    'cold-reset': { type: 'string' }
+  }
 });
 const [command, toolName, appId] = positionals;
 const app = APPS[appId];
@@ -24,6 +30,7 @@ const tool = (await import(`./tools/${toolName}.mjs`)).default;
 if (!tool.apps.includes(appId)) throw new Error(`${toolName} is not measured on ${appId}`);
 
 const name = `bmk-${toolName}-${appId}`;
+const change = describeChange(app, values.change);
 const dir = join(ROOT, 'work', name);
 const runs = Number(values.runs);
 mkdirSync(join(ROOT, 'logs'), { recursive: true });
@@ -40,7 +47,7 @@ async function prepare() {
   copyAppSource(app, dir);
   const files = tool.files(ctx);
   if (tool.gitDeploy === 'github-actions') files['.github/workflows/deploy.yml'] = githubWorkflow(tool.deploy(ctx));
-  files['.gitignore'] = 'node_modules/\n.serverless/\n.sst/\ncdk.out/\n.stacktape/\n.bench-addresses.json\n';
+  files['.gitignore'] = 'node_modules/\npackages/service/src/generated/\n.serverless/\n.sst/\ncdk.out/\n.stacktape/\n.bench-addresses.json\n';
   for (const [file, content] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, file)), { recursive: true });
     writeFileSync(join(dir, file), content);
@@ -48,7 +55,7 @@ async function prepare() {
   if (tool.devDependencies) {
     const path = join(dir, 'package.json');
     const pkg = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { name, private: true, type: 'module' };
-    pkg.devDependencies = tool.devDependencies;
+    pkg.devDependencies = { ...pkg.devDependencies, ...tool.devDependencies };
     writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
     await run(['npm', 'install', '--no-audit', '--no-fund'], { cwd: dir, log });
   }
@@ -98,7 +105,7 @@ async function packageRuns() {
   for (let i = 1; i <= runs; i++) {
     if (values.warm) {
       // Keep the previous build and its cache; change only the source, like a developer's next build.
-      editSource(app, dir, `package-${Date.now()}`);
+      editSource(dir, change, `package-${Date.now()}`);
     } else {
       for (const output of tool.buildOutputs) rmSync(join(dir, output), { recursive: true, force: true });
       if (app.kind === 'service') await ctx.run(['docker', 'builder', 'prune', '-af']);
@@ -118,9 +125,14 @@ async function packageRuns() {
 async function timedChange({ journey, push, deploy }) {
   const addresses = JSON.parse(readFileSync(addressFile, 'utf8'));
   const revision = `r${Date.now()}`;
-  const expected = Object.fromEntries(targetNames(app).map((t) => [t, app.changed.includes(t) ? revision : readRevision(app, dir, t)]));
-  editSource(app, dir, revision);
-  await git('commit', '-qam', `Change revision to ${revision}`);
+  // Changed targets must serve the new revision. For a per-target change, the others must keep their old one.
+  const expected = {};
+  for (const t of targetNames(app)) {
+    if (change.targets.includes(t)) expected[t] = revision;
+    else if (change.kind === 'handlers') expected[t] = readRevision(dir, change.file(t));
+  }
+  editSource(dir, change, revision);
+  await git('commit', '-qam', `Change ${change.kind === 'shared' ? change.file() : 'revisions'} to ${revision}`);
   if (push) for (const result of await runAll(push)) if (result.code) throw new Error(`git push failed; see ${log}`);
   const pushedAt = push ? new Date().toISOString() : undefined;
   const started = performance.now();
@@ -129,6 +141,8 @@ async function timedChange({ journey, push, deploy }) {
   running.then((results) => (failed = results.some((r) => r.code !== 0)));
   const unexpected = [];
   const readyAt = await waitForRevisions(app, addresses, expected, {
+    field: change.field,
+    changed: change.targets,
     onUnexpected: (target, seen) => unexpected.push({ target, seen }),
     stop: () => failed && 'the deploy command failed'
   });
@@ -138,11 +152,13 @@ async function timedChange({ journey, push, deploy }) {
   const checks = await Promise.all(
     targetNames(app).map(async (t) => {
       const response = await call(app, t, addresses[t], { business: true });
-      return businessOk(app, t, response) && response.revision === expected[t];
+      return businessOk(app, t, response) && (expected[t] === undefined || response[change.field] === expected[t]);
     })
   );
   return {
     journey,
+    change: change.kind,
+    changedTargets: change.targets.length,
     revision,
     pushedAt,
     readyMs: Math.round(readyAt - started),

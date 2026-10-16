@@ -9,8 +9,8 @@ const cdk = ['npx', 'cdk'];
 function lambdaApp({ app, name }) {
   const functions = app.functions.map((fn) => {
     // PDFKit reads its font files from disk, so it is installed into the function instead of bundled.
-    const bundling = fn === 'report' ? `, bundling: { nodeModules: ['pdfkit'] }` : '';
-    return `new NodejsFunction(stack, '${fn}', { entry: 'handlers/${fn}.mjs', functionName: '${name}-${fn}', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30)${bundling} });`;
+    const bundling = fn === 'sales-report' ? `, bundling: { nodeModules: ['pdfkit'] }` : '';
+    return `new NodejsFunction(stack, '${fn}', { entry: 'packages/functions/src/handlers/${fn}.ts', functionName: '${name}-${fn}', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30)${bundling} });`;
   });
   return `import { App, Duration, Stack } from 'aws-cdk-lib';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';

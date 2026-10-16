@@ -13,8 +13,8 @@ function config({ app, name }) {
     body = app.functions
       .map((fn) => {
         // PDFKit reads its font files from disk, so it is installed into the function instead of bundled.
-        const install = fn === 'report' ? `, nodejs: { install: ['pdfkit'] }` : '';
-        return `    new sst.aws.Function('${pascal(fn)}', { handler: 'handlers/${fn}.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds'${install} });`;
+        const install = fn === 'sales-report' ? `, nodejs: { install: ['pdfkit'] }` : '';
+        return `    new sst.aws.Function('${pascal(fn)}', { handler: 'packages/functions/src/handlers/${fn}.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds'${install} });`;
       })
       .join('\n');
   } else {

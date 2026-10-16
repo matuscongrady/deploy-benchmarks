@@ -1,55 +1,13 @@
 {
   "projectName": "bmk-stacktape-lambda-5",
   "resources": {
-    "report": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/report.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "productLookup": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/product-lookup.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
-    "cartPricing": {
-      "type": "function",
-      "properties": {
-        "packaging": {
-          "type": "js-bundle",
-          "properties": {
-            "entryfilePath": "handlers/cart-pricing.mjs"
-          }
-        },
-        "runtime": "nodejs22.x",
-        "memory": 512,
-        "timeout": 30
-      }
-    },
     "createOrder": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/create-order.mjs"
+            "entryfilePath": "packages/functions/src/handlers/create-order.ts"
           }
         },
         "runtime": "nodejs22.x",
@@ -57,13 +15,55 @@
         "timeout": 30
       }
     },
-    "notification": {
+    "paymentCapture": {
       "type": "function",
       "properties": {
         "packaging": {
           "type": "js-bundle",
           "properties": {
-            "entryfilePath": "handlers/notification.mjs"
+            "entryfilePath": "packages/functions/src/handlers/payment-capture.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "orderConfirmationEmail": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/order-confirmation-email.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "fulfilmentDispatch": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/fulfilment-dispatch.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    },
+    "salesReport": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/sales-report.ts"
           }
         },
         "runtime": "nodejs22.x",

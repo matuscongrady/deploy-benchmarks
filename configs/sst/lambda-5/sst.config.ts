@@ -4,10 +4,10 @@ export default $config({
     return { name: 'bmk-sst-lambda-5', home: 'aws', removal: 'remove', providers: { aws: { region: 'eu-west-1' } } };
   },
   async run() {
-    new sst.aws.Function('Report', { handler: 'handlers/report.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds', nodejs: { install: ['pdfkit'] } });
-    new sst.aws.Function('ProductLookup', { handler: 'handlers/product-lookup.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
-    new sst.aws.Function('CartPricing', { handler: 'handlers/cart-pricing.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
-    new sst.aws.Function('CreateOrder', { handler: 'handlers/create-order.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
-    new sst.aws.Function('Notification', { handler: 'handlers/notification.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
+    new sst.aws.Function('CreateOrder', { handler: 'packages/functions/src/handlers/create-order.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
+    new sst.aws.Function('PaymentCapture', { handler: 'packages/functions/src/handlers/payment-capture.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
+    new sst.aws.Function('OrderConfirmationEmail', { handler: 'packages/functions/src/handlers/order-confirmation-email.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
+    new sst.aws.Function('FulfilmentDispatch', { handler: 'packages/functions/src/handlers/fulfilment-dispatch.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds' });
+    new sst.aws.Function('SalesReport', { handler: 'packages/functions/src/handlers/sales-report.handler', runtime: 'nodejs22.x', memory: '512 MB', timeout: '30 seconds', nodejs: { install: ['pdfkit'] } });
   }
 });

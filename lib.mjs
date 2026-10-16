@@ -35,39 +35,51 @@ export const targetNames = (app) => (app.kind === 'lambda' ? app.functions : Obj
 /** Copies the application source into a fresh project directory. Installed output is never copied. */
 export function copyAppSource(app, dir) {
   mkdirSync(dir, { recursive: true });
-  const skip = (path) => !/(node_modules|\.venv|__pycache__|check\.mjs|check\.py|requirements-check)/.test(path);
   if (app.kind === 'lambda') {
+    // The whole backend monorepo, with only this app's handlers. Installed and generated output is not copied.
     const src = join(ROOT, 'fixtures/lambdas');
-    cpSync(join(src, 'data.mjs'), join(dir, 'data.mjs'));
-    for (const fn of app.functions) {
-      for (const file of [`${fn}.mjs`, `${fn}.revision.mjs`]) cpSync(join(src, 'handlers', file), join(dir, 'handlers', file));
-    }
-    // Each Lambda app declares only the dependencies its functions import.
-    for (const file of ['package.json', 'package-lock.json']) cpSync(join(src, 'workload-locks', app.id, file), join(dir, file));
+    const handler = /packages\/functions\/src\/handlers\/([\w-]+?)(\.revision)?\.ts$/;
+    const keep = (path) => {
+      const rel = path.slice(src.length + 1);
+      if (/(^|\/)(node_modules|generated)(\/|$)|^check\.mjs$/.test(rel)) return false;
+      const match = rel.match(handler);
+      return !match || app.functions.includes(match[1]);
+    };
+    cpSync(src, dir, { recursive: true, filter: keep });
     return;
   }
+  const skip = (path) => !/(node_modules|\.venv|__pycache__|check\.mjs|check\.py|requirements-check)/.test(path);
   for (const [name, service] of Object.entries(app.services)) {
     cpSync(join(ROOT, service.buildContext), join(dir, serviceDir(app, name)), { recursive: true, filter: skip });
   }
 }
 
-/** Path of the file that holds a target's revision string. */
-export function revisionFile(app, target) {
-  if (app.kind === 'lambda') return join('handlers', `${target}.revision.mjs`);
-  return join(serviceDir(app, target), app.language === 'python' ? 'revision.py' : 'revision.mjs');
-}
-
-/** The scripted source edit every tool receives: it changes the revision string of each changed target. */
-export function editSource(app, dir, revision) {
-  for (const target of app.changed) {
-    const file = join(dir, revisionFile(app, target));
-    const text = file.endsWith('.py') ? `REVISION = '${revision}'\n` : `export const revision = '${revision}';\n`;
-    writeFileSync(file, text);
+/**
+ * The code change a deploy run makes. `handlers` (the default) edits the revision file of each changed function or
+ * service; responses report it as `revision`. `shared` edits a module of the Lambda backend's shared service package,
+ * which every function imports; responses report it as `serviceRevision`.
+ */
+export function describeChange(app, kind = 'handlers') {
+  if (kind === 'shared') {
+    if (app.kind !== 'lambda') throw new Error('The shared change applies to the Lambda apps');
+    return { kind, targets: app.functions, field: 'serviceRevision', file: () => manifest.lambda.sharedChange.file };
   }
+  const file = (target) =>
+    app.kind === 'lambda'
+      ? join('packages/functions/src/handlers', `${target}.revision.ts`)
+      : join(serviceDir(app, target), app.language === 'python' ? 'revision.py' : 'revision.mjs');
+  return { kind, targets: app.changed, field: 'revision', file };
 }
 
-export function readRevision(app, dir, target) {
-  return readFileSync(join(dir, revisionFile(app, target)), 'utf8').match(/'([^']*)'/)[1];
+const REVISION = /((?:revision|REVISION|serviceRevision) = ')([^']*)'/;
+export const readRevision = (dir, file) => readFileSync(join(dir, file), 'utf8').match(REVISION)[2];
+
+/** Writes a new revision string into each file the change touches. */
+export function editSource(dir, change, revision) {
+  for (const file of new Set(change.targets.map(change.file))) {
+    const path = join(dir, file);
+    writeFileSync(path, readFileSync(path, 'utf8').replace(REVISION, `$1${revision}'`));
+  }
 }
 
 /** Runs a command, appending its output to `log`. Resolves with the exit code and elapsed milliseconds. */
@@ -97,9 +109,10 @@ export function capture(cmd, cwd) {
 export const fileSize = (path) => statSync(path).size;
 
 /** Size of a directory zipped at deflate level 6 (zlib's default), for tools that zip only during deploy. */
-export function zipSize(dir) {
+export function zipSize(dir, { symlinks = false } = {}) {
   const out = join(tmpdir(), `bmk-${process.pid}-${Date.now()}.zip`);
-  execFileSync('zip', ['-q', '-r', '-X', '-6', out, '.'], { cwd: dir });
+  // `symlinks` stores links as links, as a tool that ships them does, instead of a second copy of what they point to.
+  execFileSync('zip', ['-q', '-r', '-X', '-6', ...(symlinks ? ['-y'] : []), out, '.'], { cwd: dir });
   const bytes = statSync(out).size;
   rmSync(out);
   return bytes;
@@ -144,7 +157,13 @@ export async function call(app, target, address, { business = false } = {}) {
   if (app.kind === 'lambda') {
     const result = await lambda.send(new InvokeCommand({ FunctionName: address, Payload: JSON.stringify({}) }));
     if (result.FunctionError) throw new Error(`${target}: ${Buffer.from(result.Payload).toString()}`);
-    return JSON.parse(Buffer.from(result.Payload).toString());
+    const payload = JSON.parse(Buffer.from(result.Payload).toString());
+    // A queue worker answers with its batch result; the first message's result carries the business fields.
+    if (Array.isArray(payload?.results)) return { ...payload, ...payload.results[0] };
+    if (typeof payload?.body !== 'string') return payload;
+    // HTTP handlers answer in API Gateway's format; the result is the JSON body.
+    if (payload.statusCode !== 200) throw new Error(`${target}: HTTP ${payload.statusCode} ${payload.body}`);
+    return JSON.parse(payload.body);
   }
   const probe = business ? app.services[target].businessProbe : app.services[target].versionProbe;
   let body = probe.body && { ...probe.body };
@@ -179,7 +198,7 @@ export function businessOk(app, target, response) {
  * of the last target's first correct answer. A new call starts every interval even while earlier calls are still
  * running (at most four at a time per target), so a slow function does not lower the timer's resolution.
  */
-export async function waitForRevisions(app, addresses, expected, { timeoutMs = 45 * 60_000, onUnexpected, stop } = {}) {
+export async function waitForRevisions(app, addresses, expected, { field, changed, timeoutMs = 45 * 60_000, onUnexpected, stop } = {}) {
   const interval = app.kind === 'lambda' ? 250 : 1000;
   const deadline = performance.now() + timeoutMs;
   let readyAt = 0;
@@ -193,11 +212,12 @@ export async function waitForRevisions(app, addresses, expected, { timeoutMs = 4
         if (inFlight < 4) {
           inFlight++;
           call(app, target, addresses[target])
-            .then(({ revision }) => {
+            .then((response) => {
+              const revision = response[field];
               if (revision === expected[target] && !done) {
                 done = true;
                 readyAt = Math.max(readyAt, performance.now());
-              } else if (revision !== expected[target] && !app.changed.includes(target)) onUnexpected?.(target, revision);
+              } else if (revision !== expected[target] && !changed.includes(target)) onUnexpected?.(target, revision);
             })
             .catch(() => {}) // Errors during a rollout are expected; keep polling.
             .finally(() => inFlight--);
