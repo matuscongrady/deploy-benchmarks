@@ -2,7 +2,7 @@
 //   node report.mjs
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT } from './lib.mjs';
+import { APPS, ROOT } from './lib.mjs';
 
 const load = (file) =>
   existsSync(join(ROOT, 'results', file))
@@ -32,9 +32,14 @@ function table(title, rows, key, columns) {
   for (const line of [header, ...lines]) console.log(line.map((cell, i) => cell.padEnd(widths[i])).join('  '));
 }
 
+// Container build time belongs to the deploy table: no tool builds an image except as part of its deploy.
 const packages = load('package.jsonl');
-table('Packaging time and upload size', packages, (r) => `${r.app} ${r.tool} ${r.cache}`, [
+const isContainer = (r) => APPS[r.app]?.kind === 'service';
+table('Lambda packaging time and upload size', packages.filter((r) => !isContainer(r)), (r) => `${r.app} ${r.tool} ${r.cache}`, [
   ['seconds: median (min–max)', (g) => stats(g.map((r) => r.ms), seconds)],
+  ['MB: median (min–max)', (g) => stats(g.map((r) => r.bytes), megabytes)]
+]);
+table('Container image size', packages.filter(isContainer), (r) => `${r.app} ${r.tool}`, [
   ['MB: median (min–max)', (g) => stats(g.map((r) => r.bytes), megabytes)]
 ]);
 

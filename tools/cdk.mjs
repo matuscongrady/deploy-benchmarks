@@ -62,7 +62,7 @@ export default {
   buildOutputs: ['cdk.out'],
   // `cdk synth` bundles each function into cdk.out. CDK zips the asset directories later, during `cdk deploy`, so
   // zipping is not in CDK's packaging time; the upload size zips each directory at zlib's default level, as CDK does.
-  // Container images are built only during `cdk deploy`, with `docker build`; we time that build directly.
+  // Container images are built only during `cdk deploy`, with `docker build`; the same build here gives the image size.
   package: ({ app, name }) => (app.kind === 'service' ? dockerBuild(app, 'api', name) : [...cdk, 'synth', '--quiet']),
   artifacts: ({ app, name, dir }) =>
     app.kind === 'service'

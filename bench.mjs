@@ -1,7 +1,8 @@
 // Runs one measurement series for one tool and one application. README.md explains the method.
 //
 //   node bench.mjs setup   <tool> <app>                     create the project and deploy it once (not timed)
-//   node bench.mjs package <tool> <app> [--runs 5] [--warm]  package from a clean (or warm) build cache
+//   node bench.mjs package <tool> <app> [--runs 5] [--warm]  package Lambda functions from a clean (or warm) build
+//                                                            cache; for a container, record only the image size
 //   node bench.mjs deploy  <tool> <app> [--runs 5]           deploy a code change from this machine
 //   node bench.mjs push    <tool> <app> [--runs 5]           push a code change: cold, then warm 15 minutes later
 //   deploy and push take --change shared to change the shared service package (packages/service/src/orders.ts) instead of each handler (Lambda apps)
@@ -93,6 +94,11 @@ async function setup() {
   console.log(`Set up ${name}; every target passed its business check.`);
 }
 
+async function measureArtifacts() {
+  const artifacts = (await tool.artifacts(ctx)).map((a) => ({ file: a.file, bytes: a.bytes ?? fileSize(a.path) }));
+  return { bytes: artifacts.reduce((sum, a) => sum + a.bytes, 0), artifacts };
+}
+
 async function packageRuns() {
   if (!tool.package || appId === 'five-services') throw new Error(`No packaging test for ${toolName} on ${appId}`);
   await prepare();
@@ -102,17 +108,23 @@ async function packageRuns() {
   // the local image store; clean runs empty only the build cache.
   for (const image of tool.baseImages?.(ctx) ?? []) await ctx.run(['docker', 'pull', image]);
   await ctx.run(tool.package(ctx));
+  // No tool builds a container image except as part of its deploy, so container build time is measured there. Here a
+  // container gets only its image size, which the build just made.
+  if (app.kind === 'service') {
+    const { bytes, artifacts } = await measureArtifacts();
+    record('package.jsonl', { app: appId, bytes, artifacts, ...info, at: new Date().toISOString() });
+    console.log(`${name} image: ${bytes} bytes`);
+    return;
+  }
   for (let i = 1; i <= runs; i++) {
     if (values.warm) {
       // Keep the previous build and its cache; change only the source, like a developer's next build.
       editSource(dir, change, `package-${Date.now()}`);
     } else {
       for (const output of tool.buildOutputs) rmSync(join(dir, output), { recursive: true, force: true });
-      if (app.kind === 'service') await ctx.run(['docker', 'builder', 'prune', '-af']);
     }
     const { ms } = await ctx.run(tool.package(ctx));
-    const artifacts = (await tool.artifacts(ctx)).map((a) => ({ file: a.file, bytes: a.bytes ?? fileSize(a.path) }));
-    const bytes = artifacts.reduce((sum, a) => sum + a.bytes, 0);
+    const { bytes, artifacts } = await measureArtifacts();
     record('package.jsonl', { app: appId, cache: values.warm ? 'warm' : 'clean', run: i, ms, bytes, artifacts, ...info, at: new Date().toISOString() });
     console.log(`${name} package run ${i}: ${ms} ms, ${bytes} bytes`);
   }

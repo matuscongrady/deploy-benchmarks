@@ -56,7 +56,7 @@ export default {
   buildOutputs: ['.sst/artifacts'],
   // SST has no packaging-only command. `sst diff` on a deployed stage builds and zips every function, then compares
   // the plan with the deployed state, so its time includes reading that state from AWS.
-  // Container images are built during `sst deploy` with `docker build`; we time that build directly.
+  // Container images are built during `sst deploy` with `docker build`; the same build here gives the image size.
   package: ({ app, name }) => (app.kind === 'service' ? dockerBuild(app, 'api', name) : [...sst, 'diff', '--stage', STAGE]),
   artifacts({ app, name, dir }) {
     if (app.kind === 'service') return [{ file: name, bytes: imageBytes(name) }];

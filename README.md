@@ -2,7 +2,8 @@
 
 This repository measures two things for several deployment tools:
 
-- **Packaging:** how long a tool takes to turn an application into what it uploads, and how big that upload is.
+- **Packaging:** how long a tool takes to turn Lambda functions into what it uploads, and how big that upload is. For
+  containers, only the image size.
 - **Deploying a change:** how long it takes from starting a deploy until the changed code answers requests.
 
 The tools are Stacktape, Serverless Framework, SST, AWS CDK, Render, Heroku and Ravion. Stacktape publishes these
@@ -16,7 +17,7 @@ Results will be published here after the measurement runs on a dedicated EC2 mac
 | Test | Stacktape | Serverless Framework | SST | AWS CDK | Render | Heroku | Ravion |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Package 1 / 5 / 25 Lambda functions | – | – | – | – | | | |
-| Build the Node.js / Python container | – | | – | – | – | – | – |
+| Node.js / Python container image size | – | | – | – | | – | |
 | Deploy a change from a laptop | – | – | – | – | | – | |
 | Deploy a change by Git push | – | – | – | – | – | – | – |
 
@@ -35,7 +36,7 @@ of them are described in [`fixtures/README.md`](fixtures/README.md).
 | Test | Applications | Tools |
 | --- | --- | --- |
 | Lambda packaging | 1, 5 and 25 functions | Stacktape, Serverless Framework, SST, AWS CDK |
-| Container build | a Node.js API and a Python API | Stacktape, SST, AWS CDK, Render, Heroku, Ravion |
+| Container image size | a Node.js API and a Python API | Stacktape, SST, AWS CDK |
 | Deploy a change from a laptop | all of the above | the tools that deploy from the command line |
 | Deploy a change by Git push, first push | all of the above, plus five services | every tool |
 | Deploy a change by Git push, 15 minutes later | same as the first push | every tool |
@@ -62,10 +63,12 @@ the right business result (for example a cart total of `33.00`) from the expecte
 check are kept in the raw data but left out of the results.
 
 **Packaging.** The clock covers the tool's own packaging command. Before each run we delete the tool's previous build
-output. For container builds we also empty Docker's build cache. Base images stay in the local image store for every
-tool: we pull the base image of the SST and CDK Dockerfile before the series, and Stacktape pulls its own base images.
-Every series starts with one run that is not measured, so nothing a tool downloads on first use is timed. The
-"warm" container series keeps the previous build and changes only the source, like a developer's next build.
+output. Every series starts with one run that is not measured, so nothing a tool downloads on first use is timed. The
+"warm" series keeps the previous build and changes only the source, like a developer's next build.
+
+**Container build time is part of the deploy, not packaging.** No tool builds a container image except as part of a
+deploy, so the deploy test times each tool's whole deploy command, image build included; for containers, the
+packaging test reports only the image size.
 
 **Upload size.** For Lambda, this is everything the tool uploads as code: each function's ZIP, each layer it creates,
 and the source maps it uploads next to the ZIPs (SST and Stacktape do this). For containers, it is the compressed
@@ -120,8 +123,8 @@ modules in [`tools/`](tools).
 - Packaging: SST has no command that only packages. `sst diff` on a deployed stage builds and zips every function,
   then compares the plan with what is deployed. Its time therefore includes that comparison, which reads from AWS.
 - Containers are built from a plain [Dockerfile](configs/sst/node/Dockerfile): the official slim image, a locked
-  production install, then the source. SST runs `docker build` during `sst deploy`; the packaging test runs the same
-  `docker build` directly.
+  production install, then the source. SST runs `docker build` during `sst deploy`; for the image size, the packaging
+  test runs the same `docker build` directly.
 - Git push: the [shared GitHub Actions workflow](configs/sst/lambda-5/.github/workflows/deploy.yml). SST's own
   Autodeploy needs an SST Console account and is not measured.
 
@@ -132,7 +135,7 @@ modules in [`tools/`](tools).
 - Packaging: `cdk synth`, which bundles each function with esbuild (installed in the project, as CDK recommends).
   CDK zips the bundles later, during `cdk deploy`, so zipping is not part of CDK's packaging time. For the upload
   size we zip each bundle at the same compression level CDK uses.
-- Containers use the same Dockerfile as SST and the same direct `docker build`.
+- Containers use the same Dockerfile as SST, and the image size comes from the same direct `docker build`.
 - Git push: the [shared GitHub Actions workflow](configs/cdk/lambda-5/.github/workflows/deploy.yml).
 - **CDK with hotswap** is reported as a separate tool. `cdk deploy --hotswap` updates Lambda code and ECS services
   directly, which is CDK's fast path for code changes. CDK documents it for development stacks only, because it
@@ -180,9 +183,9 @@ query compiler is plain JavaScript and WebAssembly in Prisma 7. `prisma generate
 - **Stacktape is not the fastest or smallest everywhere.** In our local test runs, AWS CDK's Lambda uploads were
   smaller for 1 and 5 functions, partly because CDK uploads no source maps by default. Stacktape's uploads also
   contain TypeScript (about 10 MB compressed): Prisma lists it as an optional peer dependency, and Stacktape installs
-  it next to PDFKit. The plain Dockerfile that SST and CDK build produced both container images faster than
-  Stacktape, from an empty build cache and after a source change. The published results will show every case where
-  Stacktape loses.
+  it next to PDFKit. A bare `docker build` of the plain Dockerfile that SST and CDK use was faster than Stacktape's
+  container build, from an empty build cache and after a source change; that build time is part of each deploy
+  result. The published results will show every case where Stacktape loses.
 - **The tools roll out changes differently.** Serverless Framework and AWS CDK go through CloudFormation. Stacktape
   and CDK with hotswap update code directly. SST uses Pulumi. Render, Heroku and Ravion run their own pipelines. We
   measure each tool's normal path; the guarantees are not the same.
@@ -235,7 +238,7 @@ Applications are `lambda-1`, `lambda-5`, `lambda-25`, `node`, `python` and `five
 ```sh
 node bench.mjs setup   sst lambda-5             # create the project and deploy it (not measured)
 node bench.mjs package sst lambda-5 --runs 10   # package from an empty build cache
-node bench.mjs package sst node --runs 10 --warm
+node bench.mjs package sst node                 # container image size
 node bench.mjs deploy  sst lambda-5 --runs 10   # deploy a change from this machine
 node bench.mjs remove  sst lambda-5             # delete everything setup created
 node report.mjs                                 # median, fastest and slowest run of every series
