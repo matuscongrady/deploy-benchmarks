@@ -84,6 +84,7 @@ export default {
     const [{ owner }] = await api('/owners');
     await Promise.all(
       services(ctx).map(async (s) => {
+        if ((await api(`/services?name=${encodeURIComponent(s.name)}`)).length) return; // Created by an earlier setup.
         const { service: created, deployId } = await api('/services', {
           method: 'POST',
           body: {
