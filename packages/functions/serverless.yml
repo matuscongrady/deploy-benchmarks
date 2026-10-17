@@ -1,0 +1,19 @@
+service: bmk-serverless-lambda-1
+frameworkVersion: '4.44.0'
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: eu-west-1
+  memorySize: 512
+  timeout: 30
+package:
+  individually: true
+build:
+  esbuild:
+    external:
+      - pdfkit
+    banner:
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+functions:
+  sales-report:
+    handler: src/handlers/sales-report.handler
