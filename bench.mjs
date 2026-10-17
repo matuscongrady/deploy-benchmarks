@@ -146,7 +146,13 @@ async function timedChange({ journey, push, deploy }) {
   }
   editSource(dir, change, revision);
   await git('commit', '-qam', `Change ${change.kind === 'shared' ? change.file() : 'revisions'} to ${revision}`);
-  if (push) for (const result of await runAll(push)) if (result.code) throw new Error(`git push failed; see ${log}`);
+  // GitHub sometimes rejects a push without a reason; a retry of the same push succeeds.
+  for (let attempt = 1; push; attempt++) {
+    const results = await runAll(push);
+    if (results.every((r) => r.code === 0)) break;
+    if (attempt === 3) throw new Error(`git push failed; see ${log}`);
+    await sleep(5000);
+  }
   const pushedAt = push ? new Date().toISOString() : undefined;
   const started = performance.now();
   const running = deploy ? runAll(deploy) : Promise.resolve([]);
