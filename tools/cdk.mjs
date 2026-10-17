@@ -9,12 +9,16 @@ const cdk = ['npx', 'cdk'];
 function lambdaApp({ app, name }) {
   const functions = app.functions.map((fn) => {
     // PDFKit reads its font files from disk, so it is installed into the function instead of bundled.
-    const bundling = fn === 'sales-report' ? `, bundling: { nodeModules: ['pdfkit'] }` : '';
-    return `new NodejsFunction(stack, '${fn}', { entry: 'packages/functions/src/handlers/${fn}.ts', functionName: '${name}-${fn}', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30)${bundling} });`;
+    const nodeModules = fn === 'sales-report' ? `, nodeModules: ['pdfkit']` : '';
+    return `new NodejsFunction(stack, '${fn}', { entry: 'packages/functions/src/handlers/${fn}.ts', functionName: '${name}-${fn}', runtime: Runtime.NODEJS_22_X, memorySize: 512, timeout: Duration.seconds(30), bundling: { ...esm${nodeModules} } });`;
   });
   return `import { App, Duration, Stack } from 'aws-cdk-lib';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
+
+// Prisma's generated client reads import.meta.url, which a CommonJS bundle leaves empty, so the functions are bundled
+// as ES modules. The banner gives them a \`require\` for CommonJS dependencies that load Node.js built-ins.
+const esm = { format: OutputFormat.ESM, banner: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);" };
 
 const app = new App();
 const stack = new Stack(app, '${name}', { env: { region: '${REGION}' } });

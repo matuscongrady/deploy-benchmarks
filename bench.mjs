@@ -79,8 +79,17 @@ async function setup() {
   for (const cmd of tool.afterFirstDeploy?.(ctx) ?? []) await ctx.run(cmd);
   const addresses = await tool.addresses(ctx);
   for (const target of targetNames(app)) {
-    const response = await call(app, target, addresses[target], { business: true });
-    if (!businessOk(app, target, response)) throw new Error(`${target} returned an unexpected result: ${JSON.stringify(response)}`);
+    // A new service can take a moment to receive traffic after its platform reports it live, so retry for 3 minutes.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await call(app, target, addresses[target], { business: true });
+        if (!businessOk(app, target, response)) throw new Error(`${target} returned an unexpected result: ${JSON.stringify(response)}`);
+        break;
+      } catch (error) {
+        if (attempt === 36) throw error;
+        await sleep(5000);
+      }
+    }
   }
   writeFileSync(addressFile, JSON.stringify(addresses, null, 2));
   console.log(`Set up ${name}; every target passed its business check.`);

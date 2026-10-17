@@ -1,6 +1,6 @@
 // Heroku (Cedar) with the official Node.js and Python buildpacks, one Basic dyno per app in the EU region. Each service
 // is its own Heroku app.
-// Needs a logged-in Heroku CLI and the builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`.
+// Needs a logged-in Heroku CLI and the builds plugin: `heroku plugins:install @heroku-cli/heroku-builds`.
 // CLI deploy: `git push` to Heroku's Git remote. Git push journey: Heroku's GitHub integration with automatic
 // deploys, connected by hand in the Heroku dashboard. It builds only the repository root, so not five-services.
 import { capture, targetNames } from '../lib.mjs';
@@ -18,7 +18,7 @@ export default {
     region: "The apps run in Heroku's EU region (Dublin), the closest to `eu-west-1`, each on one Basic dyno (512 MB), which is always on.",
     configNote: 'Heroku needs no configuration: the application already has a `Procfile` and runtime version files.',
     version: "Hosted by Heroku: the default stack and the official Node.js and Python buildpacks. Heroku doesn't offer a choice of buildpack version.",
-    credentials: ['`HEROKU_API_KEY`, or run `heroku login` once.', 'The builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`.'],
+    credentials: ['`HEROKU_API_KEY`, or run `heroku login` once.', 'The builds plugin: `heroku plugins:install @heroku-cli/heroku-builds`.'],
     gitPush: ({ id }) =>
       id === 'five-services'
         ? undefined // Heroku's GitHub integration builds only the repository root.

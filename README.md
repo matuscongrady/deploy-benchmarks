@@ -44,7 +44,7 @@ Replace `sst lambda-25` with any tool and application from the list of branches.
 | AWS CDK | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
 | AWS CDK with hotswap | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
 | Render | `RENDER_API_KEY`: the harness creates the services, reads their URLs and build events and empties their build caches through the Render API.<br>`BENCH_FORK`: the URL of your fork. Render's GitHub app must have access to it. |
-| Heroku | `HEROKU_API_KEY`, or run `heroku login` once.<br>The builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`. |
+| Heroku | `HEROKU_API_KEY`, or run `heroku login` once.<br>The builds plugin: `heroku plugins:install @heroku-cli/heroku-builds`. |
 | Ravion | Run `ravion login` once.<br>`RAVION_URL_API`, and for five services also `RAVION_URL_REPORTING`, `RAVION_URL_INVENTORY`, `RAVION_URL_WEBHOOKS` and `RAVION_URL_NOTIFICATIONS`: the URL of each service. |
 
 <!-- /generated:credentials -->
