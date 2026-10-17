@@ -1,0 +1,7 @@
+node_modules/
+packages/service/src/generated/
+.serverless/
+.sst/
+cdk.out/
+.stacktape/
+.bench-addresses.json
