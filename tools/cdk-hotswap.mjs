@@ -3,4 +3,10 @@
 // Hotswap cannot create a stack, so the untimed first deploy is a normal `cdk deploy`.
 import cdk from './cdk.mjs';
 
-export default { ...cdk, firstDeploy: cdk.deploy, deploy: () => [...cdk.deploy(), '--hotswap'], gitDeploy: undefined };
+export default {
+  ...cdk,
+  firstDeploy: cdk.deploy,
+  deploy: () => [...cdk.deploy(), '--hotswap'],
+  gitDeploy: undefined,
+  docs: { ...cdk.docs, name: 'AWS CDK with hotswap', gitPush: () => undefined }
+};

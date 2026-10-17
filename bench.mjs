@@ -1,6 +1,6 @@
 // Runs one measurement series for one tool and one application. README.md explains the method.
 //
-//   node bench.mjs setup   <tool> <app>                     create the project and deploy it once (not timed)
+//   node bench.mjs setup   <tool> <app>                     write the test's project into work/ and deploy it once (not timed)
 //   node bench.mjs package <tool> <app> [--runs 5] [--warm]  package Lambda functions from a clean (or warm) build
 //                                                            cache; for a container, record only the image size
 //   node bench.mjs deploy  <tool> <app> [--runs 5]           deploy a code change from this machine
@@ -8,12 +8,13 @@
 //   deploy and push take --change shared to change the shared service package (packages/service/src/orders.ts) instead of each handler (Lambda apps)
 //   node bench.mjs remove  <tool> <app>                      delete what setup created
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  APPS, businessOk, call, copyAppSource, describeChange, editSource, fileSize, functionNames, githubWorkflow, machine, readRevision, record, ROOT,
-  run, sleep, targetNames, waitForRevisions
+  APPS, businessOk, call, describeChange, editSource, fileSize, functionNames, machine, readRevision, record, ROOT, run, sleep, targetNames,
+  waitForRevisions
 } from './lib.mjs';
+import { commitProject, installDirs, measurements, test, TOOLS, writeProject } from './project.mjs';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -26,48 +27,34 @@ const { positionals, values } = parseArgs({
 });
 const [command, toolName, appId] = positionals;
 const app = APPS[appId];
-if (!app || !toolName) throw new Error('Usage: node bench.mjs <setup|package|deploy|push|remove> <tool> <app>. See README.md.');
+if (!app || !TOOLS.includes(toolName)) {
+  throw new Error(`Usage: node bench.mjs <setup|package|deploy|push|remove> <tool> <app>. Tools: ${TOOLS.join(', ')}. Apps: ${Object.keys(APPS).join(', ')}.`);
+}
 const tool = (await import(`./tools/${toolName}.mjs`)).default;
 if (!tool.apps.includes(appId)) throw new Error(`${toolName} is not measured on ${appId}`);
 
-const name = `bmk-${toolName}-${appId}`;
+const t = test(toolName, tool, appId);
+const { name, branch } = t;
 const change = describeChange(app, values.change);
 const dir = join(ROOT, 'work', name);
 const runs = Number(values.runs);
 mkdirSync(join(ROOT, 'logs'), { recursive: true });
 const log = join(ROOT, 'logs', `${name}-${command}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
-const ctx = { app, name, dir, run: (cmd) => run(cmd, { cwd: dir, log }) };
+const ctx = { app, name, dir, branch, run: (cmd) => run(cmd, { cwd: dir, log }) };
 const addressFile = join(dir, '.bench-addresses.json');
 const git = (...args) => run(['git', ...args], { cwd: dir, log });
 const list = (commands) => (Array.isArray(commands[0]) ? commands : [commands]);
 const runAll = (commands) => Promise.all(list(commands).map((cmd) => run(cmd, { cwd: dir, log, allowFailure: true })));
 
-/** Writes the project: application source, tool configuration, installed dependencies and a Git repository. */
+/**
+ * Writes the project, the same files and commit as the test's branch, then installs its locked dependencies, which
+ * bundlers read from node_modules. Tools that build on their own servers need no local install.
+ */
 async function prepare() {
   if (existsSync(dir)) return;
-  copyAppSource(app, dir);
-  const files = tool.files(ctx);
-  if (tool.gitDeploy === 'github-actions') files['.github/workflows/deploy.yml'] = githubWorkflow(tool.deploy(ctx));
-  files['.gitignore'] = 'node_modules/\npackages/service/src/generated/\n.serverless/\n.sst/\ncdk.out/\n.stacktape/\n.bench-addresses.json\n';
-  for (const [file, content] of Object.entries(files)) {
-    mkdirSync(dirname(join(dir, file)), { recursive: true });
-    writeFileSync(join(dir, file), content);
-  }
-  if (tool.devDependencies) {
-    const path = join(dir, 'package.json');
-    const pkg = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { name, private: true, type: 'module' };
-    pkg.devDependencies = { ...pkg.devDependencies, ...tool.devDependencies };
-    writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
-    await run(['npm', 'install', '--no-audit', '--no-fund'], { cwd: dir, log });
-  }
-  // Install the application's locked dependencies; bundlers read them from node_modules.
-  for (const sub of appId === 'five-services' ? Object.keys(app.services) : ['.']) {
-    const done = sub === '.' && tool.devDependencies;
-    if (!done && existsSync(join(dir, sub, 'package-lock.json'))) await run(['npm', 'ci', '--no-audit', '--no-fund'], { cwd: join(dir, sub), log });
-  }
-  await git('init', '-q', '-b', 'main');
-  await git('add', '-A');
-  await git('commit', '-qm', 'Initial version');
+  writeProject(t, dir);
+  commitProject(t, dir);
+  if (!tool.remoteBuild) for (const sub of installDirs(t, dir)) await run(['npm', 'ci', '--no-audit', '--no-fund'], { cwd: join(dir, sub), log });
 }
 
 async function describeRun() {
@@ -76,7 +63,7 @@ async function describeRun() {
     toolVersion: await tool.version(ctx),
     stacktapeCommit: toolName === 'stacktape' ? process.env.STACKTAPE_COMMIT : undefined,
     machine: await machine(),
-    log
+    log: relative(ROOT, log)
   };
 }
 
@@ -206,8 +193,9 @@ async function resetCache() {
 }
 
 async function pushRuns() {
+  if (!measurements(t).push) throw new Error(`${toolName} has no Git push test on ${appId}`);
   const info = await describeRun();
-  const push = tool.push?.(ctx) ?? [['git', 'push', 'origin', 'HEAD:main']];
+  const push = [['git', 'push', 'origin', `HEAD:${branch}`]];
   for (let i = 1; i <= runs; i++) {
     let readyAt = 0;
     for (const cache of ['cold', 'warm']) {

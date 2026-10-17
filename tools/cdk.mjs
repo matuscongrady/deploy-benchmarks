@@ -2,7 +2,7 @@
 // Git push journey: the shared GitHub Actions workflow.
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE_IMAGES, capture, dockerBuild, dockerfile, imageBytes, REGION, serviceDir, stackOutputs, zipSize } from '../lib.mjs';
+import { BASE_IMAGES, capture, dockerBuild, dockerfile, githubActionsSetup, imageBytes, REGION, serviceDir, stackOutputs, zipSize } from '../lib.mjs';
 
 const cdk = ['npx', 'cdk'];
 
@@ -44,10 +44,16 @@ ${services.join('\n')}
 }
 
 export default {
-  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'node', 'python', 'five-services'],
+  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'container-node', 'container-python', 'five-services'],
   // esbuild is installed so NodejsFunction bundles locally; without it CDK bundles inside a Docker container.
   devDependencies: { 'aws-cdk': '2.1145.0', 'aws-cdk-lib': '2.273.0', constructs: '10.8.1', esbuild: '0.28.2' },
   gitDeploy: 'github-actions',
+  docs: {
+    name: 'AWS CDK',
+    version: 'AWS CDK CLI 2.1145.0 with aws-cdk-lib 2.273.0, constructs 10.8.1 and esbuild 0.28.2, all installed by `npm ci`.',
+    credentials: ['`AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup.'],
+    gitPush: () => githubActionsSetup(['AWS_ROLE_ARN'])
+  },
   files(ctx) {
     const { app } = ctx;
     const files = { 'cdk.json': JSON.stringify({ app: 'node app.mjs' }), 'app.mjs': app.kind === 'lambda' ? lambdaApp(ctx) : serviceApp(ctx) };

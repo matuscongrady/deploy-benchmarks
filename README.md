@@ -10,6 +10,45 @@ The tools are Stacktape, Serverless Framework, SST, AWS CDK, Render, Heroku and 
 results on its website, so we wrote down every choice we made. If you think a tool is set up worse than its users
 would set it up, please [open an issue](#think-a-tool-is-set-up-badly).
 
+## Reproduce one test
+
+Every test has its own branch, named `<app>/<tool>`, for example
+[`lambda-25/sst`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/sst). A branch holds only that
+application and that tool's configuration, so it deploys as it is. Its README gives the tool version, the setup, the
+commands and the shape of the result. The [list of branches](#test-branches) is below.
+
+You need Node.js 22 or newer, npm, Git, Docker with BuildKit, `zip`, the AWS CLI and a disposable AWS account.
+The AWS deployments run in `eu-west-1`. To measure how long SST takes to deploy a change to the 25-function Lambda backend:
+
+```sh
+git clone https://github.com/stacktape/deploy-benchmarks && cd deploy-benchmarks
+npm ci
+export AWS_PROFILE=<profile of a disposable account>
+node bench.mjs setup  sst lambda-25            # write the lambda-25/sst branch to work/ and deploy it once (not measured)
+node bench.mjs deploy sst lambda-25 --runs 10  # deploy a code change ten times
+node report.mjs                                # median, fastest and slowest run
+node bench.mjs remove sst lambda-25            # delete everything setup created
+```
+
+Replace `sst lambda-25` with any tool and application from the list of branches. The other measurements are
+`node bench.mjs package` (packaging and image size) and `node bench.mjs push` (Git push), described in
+[Run the benchmark](#run-the-benchmark). Each tool needs these credentials:
+
+<!-- generated:credentials -->
+
+| Tool | What it needs |
+| --- | --- |
+| Stacktape | `AWS_PROFILE`: a profile for the disposable AWS account. The harness uses it to call the deployed code and read stack outputs.<br>`STACKTAPE_API_KEY`, or run `stacktape login` once.<br>`STACKTAPE_AWS_ACCOUNT`: the name of the AWS account connection in the Stacktape Console. Stacktape deploys with credentials from that connection, not with `AWS_PROFILE`, so check with `stacktape info:whoami` that both point to the same account.<br>`STACKTAPE_BIN`: the path of the Stacktape binary to measure. |
+| Serverless Framework | `AWS_PROFILE`: a profile for the disposable AWS account.<br>`SERVERLESS_ACCESS_KEY`, or run `npm exec --workspace=packages/functions -- serverless login` once. |
+| SST | `AWS_PROFILE`: a profile for the disposable AWS account. |
+| AWS CDK | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
+| AWS CDK with hotswap | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
+| Render | `RENDER_API_KEY`: the harness reads service URLs and build events through the Render API. |
+| Heroku | `HEROKU_API_KEY`, or run `heroku login` once.<br>The builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`. |
+| Ravion | Run `ravion login` once.<br>`RAVION_URL_API`, and for five services also `RAVION_URL_REPORTING`, `RAVION_URL_INVENTORY`, `RAVION_URL_WEBHOOKS` and `RAVION_URL_NOTIFICATIONS`: the URL of each service. |
+
+<!-- /generated:credentials -->
+
 ## Results
 
 Results will be published here after the measurement runs on a dedicated EC2 machine.
@@ -21,8 +60,53 @@ Results will be published here after the measurement runs on a dedicated EC2 mac
 | Deploy a change from a laptop | – | – | – | – | | – | |
 | Deploy a change by Git push | – | – | – | – | – | – | – |
 
-Each cell will show the median of ten runs, with the fastest and slowest run. The raw data for every run is in
+Each cell will show the median of ten runs, with the fastest and slowest run. The raw data for every run will be in
 `results/`, and `node report.mjs` prints the summary.
+
+## Test branches
+
+<!-- generated:branches -->
+
+| Branch | Application | Tool | Measured |
+| --- | --- | --- | --- |
+| [`lambda-1/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-1/stacktape) | `lambda-1` | Stacktape | packaging, deploy from a laptop, Git push |
+| [`lambda-5/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-5/stacktape) | `lambda-5` | Stacktape | packaging, deploy from a laptop, Git push |
+| [`lambda-25/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/stacktape) | `lambda-25` | Stacktape | packaging, deploy from a laptop, Git push |
+| [`container-node/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/stacktape) | `container-node` | Stacktape | image size, deploy from a laptop, Git push |
+| [`container-python/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/stacktape) | `container-python` | Stacktape | image size, deploy from a laptop, Git push |
+| [`five-services/stacktape`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/stacktape) | `five-services` | Stacktape | deploy from a laptop, Git push |
+| [`lambda-1/serverless`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-1/serverless) | `lambda-1` | Serverless Framework | packaging, deploy from a laptop, Git push |
+| [`lambda-5/serverless`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-5/serverless) | `lambda-5` | Serverless Framework | packaging, deploy from a laptop, Git push |
+| [`lambda-25/serverless`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/serverless) | `lambda-25` | Serverless Framework | packaging, deploy from a laptop, Git push |
+| [`lambda-1/sst`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-1/sst) | `lambda-1` | SST | packaging, deploy from a laptop, Git push |
+| [`lambda-5/sst`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-5/sst) | `lambda-5` | SST | packaging, deploy from a laptop, Git push |
+| [`lambda-25/sst`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/sst) | `lambda-25` | SST | packaging, deploy from a laptop, Git push |
+| [`container-node/sst`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/sst) | `container-node` | SST | image size, deploy from a laptop, Git push |
+| [`container-python/sst`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/sst) | `container-python` | SST | image size, deploy from a laptop, Git push |
+| [`five-services/sst`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/sst) | `five-services` | SST | deploy from a laptop, Git push |
+| [`lambda-1/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-1/cdk) | `lambda-1` | AWS CDK | packaging, deploy from a laptop, Git push |
+| [`lambda-5/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-5/cdk) | `lambda-5` | AWS CDK | packaging, deploy from a laptop, Git push |
+| [`lambda-25/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/cdk) | `lambda-25` | AWS CDK | packaging, deploy from a laptop, Git push |
+| [`container-node/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/cdk) | `container-node` | AWS CDK | image size, deploy from a laptop, Git push |
+| [`container-python/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/cdk) | `container-python` | AWS CDK | image size, deploy from a laptop, Git push |
+| [`five-services/cdk`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/cdk) | `five-services` | AWS CDK | deploy from a laptop, Git push |
+| [`lambda-1/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-1/cdk-hotswap) | `lambda-1` | AWS CDK with hotswap | packaging, deploy from a laptop |
+| [`lambda-5/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-5/cdk-hotswap) | `lambda-5` | AWS CDK with hotswap | packaging, deploy from a laptop |
+| [`lambda-25/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/lambda-25/cdk-hotswap) | `lambda-25` | AWS CDK with hotswap | packaging, deploy from a laptop |
+| [`container-node/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/cdk-hotswap) | `container-node` | AWS CDK with hotswap | image size, deploy from a laptop |
+| [`container-python/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/cdk-hotswap) | `container-python` | AWS CDK with hotswap | image size, deploy from a laptop |
+| [`five-services/cdk-hotswap`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/cdk-hotswap) | `five-services` | AWS CDK with hotswap | deploy from a laptop |
+| [`container-node/render`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/render) | `container-node` | Render | Git push |
+| [`container-python/render`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/render) | `container-python` | Render | Git push |
+| [`five-services/render`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/render) | `five-services` | Render | Git push |
+| [`container-node/heroku`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/heroku) | `container-node` | Heroku | deploy from a laptop, Git push |
+| [`container-python/heroku`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/heroku) | `container-python` | Heroku | deploy from a laptop, Git push |
+| [`five-services/heroku`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/heroku) | `five-services` | Heroku | deploy from a laptop |
+| [`container-node/ravion`](https://github.com/stacktape/deploy-benchmarks/tree/container-node/ravion) | `container-node` | Ravion | Git push |
+| [`container-python/ravion`](https://github.com/stacktape/deploy-benchmarks/tree/container-python/ravion) | `container-python` | Ravion | Git push |
+| [`five-services/ravion`](https://github.com/stacktape/deploy-benchmarks/tree/five-services/ravion) | `five-services` | Ravion | Git push |
+
+<!-- /generated:branches -->
 
 ## What we measured
 
@@ -35,10 +119,10 @@ of them are described in [`fixtures/README.md`](fixtures/README.md).
 
 | Test | Applications | Tools |
 | --- | --- | --- |
-| Lambda packaging | 1, 5 and 25 functions | Stacktape, Serverless Framework, SST, AWS CDK |
-| Container image size | a Node.js API and a Python API | Stacktape, SST, AWS CDK |
-| Deploy a change from a laptop | all of the above | the tools that deploy from the command line |
-| Deploy a change by Git push, first push | all of the above, plus five services | every tool |
+| Lambda packaging | `lambda-1`, `lambda-5`, `lambda-25` | Stacktape, Serverless Framework, SST, AWS CDK |
+| Container image size | `container-node`, `container-python` | Stacktape, SST, AWS CDK |
+| Deploy a change from a laptop | all of the above, plus `five-services` | the tools that deploy from the command line |
+| Deploy a change by Git push, first push | all of the above | every tool |
 | Deploy a change by Git push, 15 minutes later | same as the first push | every tool |
 
 In the five-service application, the change edits three services. The other two must keep running their old code.
@@ -85,14 +169,18 @@ machine, the timings, the sizes and a log of every command.
 
 Every tool uses its documented defaults, except where noted in [Where a tool needed help](#where-a-tool-needed-help).
 On AWS, every function uses Node.js 22 with 512 MB of memory and a 30-second timeout, and every container uses
-0.25 vCPU and 512 MB. The exact files are in [`configs/`](configs); `node configs.mjs` regenerates them from the tool
-modules in [`tools/`](tools).
+0.25 vCPU and 512 MB. The npm tools are pinned in each project's `package.json` and `package-lock.json`. Render,
+Heroku and Ravion choose their own build images, so they run whatever version the platform offers at the time of the
+measurement. The exact files are in the test branches and in [`configs/`](configs); `node configs.mjs` regenerates
+them from the tool modules in [`tools/`](tools).
 
 ### Stacktape
 
 - Configuration: [`configs/stacktape/`](configs/stacktape), written by [`tools/stacktape.mjs`](tools/stacktape.mjs).
+- Version: the CLI built from source at a commit that each result records. See
+  [Build Stacktape from source](#build-stacktape-from-source).
 - Packaging: `stacktape package`. Deploy: `stacktape deploy`.
-- Functions and the Node.js service use Stacktape's `js-bundle` packaging. The Python service uses `buildpack`.
+- Functions and the Node.js services use Stacktape's `js-bundle` packaging. The Python service uses `buildpack`.
 - `stacktape deploy` updates code-only changes directly, without a CloudFormation update. This is its default.
 - Git push: Stacktape Console's Git integration, which builds on a runner in your AWS account. The runner stops after
   15 idle minutes, so the push 15 minutes later starts a stopped runner.
@@ -100,6 +188,7 @@ modules in [`tools/`](tools).
 ### Serverless Framework
 
 - Configuration: [`configs/serverless/`](configs/serverless), written by [`tools/serverless.mjs`](tools/serverless.mjs).
+- Version: 4.44.0.
 - Packaging: `serverless package`. Deploy: `serverless deploy`.
 - The Serverless service is the monorepo's `packages/functions` package, where its `serverless.yml` lives. That is
   the usual layout, and Serverless installs `external` packages at the versions in that package's `package.json`.
@@ -113,33 +202,37 @@ modules in [`tools/`](tools).
   (October 2026).
 - `serverless deploy function` is faster for a single function, but it is a separate command and skips
   CloudFormation, so we use `serverless deploy`.
-- Git push: GitHub Actions, using the [shared workflow](configs/serverless/lambda-5/.github/workflows/deploy.yml).
-  Serverless Framework v4 has no Git deployment service of its own.
+- Git push: GitHub Actions, using the
+  [shared workflow](configs/serverless/lambda-5/.github/workflows/deploy.yml). Serverless Framework v4 has no Git
+  deployment service of its own.
 
 ### SST
 
 - Configuration: [`configs/sst/`](configs/sst), written by [`tools/sst.mjs`](tools/sst.mjs).
+- Version: 4.17.2.
 - Deploy: `sst deploy`. Functions use `sst.aws.Function`; services use `sst.aws.Service` on an SST cluster.
 - Packaging: SST has no command that only packages. `sst diff` on a deployed stage builds and zips every function,
   then compares the plan with what is deployed. Its time therefore includes that comparison, which reads from AWS.
-- Containers are built from a plain [Dockerfile](configs/sst/node/Dockerfile): the official slim image, a locked
-  production install, then the source. SST runs `docker build` during `sst deploy`; for the image size, the packaging
-  test runs the same `docker build` directly.
+- Containers are built from a plain [Dockerfile](configs/sst/container-node/Dockerfile): the official slim image, a
+  locked production install, then the source. SST runs `docker build` during `sst deploy`; for the image size, the
+  packaging test runs the same `docker build` directly.
 - Git push: the [shared GitHub Actions workflow](configs/sst/lambda-5/.github/workflows/deploy.yml). SST's own
   Autodeploy needs an SST Console account and is not measured.
 
 ### AWS CDK
 
 - Configuration: [`configs/cdk/`](configs/cdk), written by [`tools/cdk.mjs`](tools/cdk.mjs).
+- Version: CDK CLI 2.1145.0 with aws-cdk-lib 2.273.0, constructs 10.8.1 and esbuild 0.28.2.
 - Deploy: `cdk deploy`. Functions use `NodejsFunction`; services use `ApplicationLoadBalancedFargateService`.
 - Packaging: `cdk synth`, which bundles each function with esbuild (installed in the project, as CDK recommends).
   CDK zips the bundles later, during `cdk deploy`, so zipping is not part of CDK's packaging time. For the upload
   size we zip each bundle at the same compression level CDK uses.
 - Containers use the same Dockerfile as SST, and the image size comes from the same direct `docker build`.
 - Git push: the [shared GitHub Actions workflow](configs/cdk/lambda-5/.github/workflows/deploy.yml).
-- **CDK with hotswap** is reported as a separate tool. `cdk deploy --hotswap` updates Lambda code and ECS services
-  directly, which is CDK's fast path for code changes. CDK documents it for development stacks only, because it
-  leaves the CloudFormation stack out of date. Its first deploy is a normal `cdk deploy`.
+- **CDK with hotswap** is reported as a separate tool, with its own branches (`<app>/cdk-hotswap`).
+  `cdk deploy --hotswap` updates Lambda code and ECS services directly, which is CDK's fast path for code changes.
+  CDK documents it for development stacks only, because it leaves the CloudFormation stack out of date. Its first
+  deploy is a normal `cdk deploy`. It has no Git push test.
 
 ### Render
 
@@ -180,12 +273,9 @@ query compiler is plain JavaScript and WebAssembly in Prisma 7. `prisma generate
 
 ## Known limitations
 
-- **Stacktape is not the fastest or smallest everywhere.** In our local test runs, AWS CDK's Lambda uploads were
-  smaller for 1 and 5 functions, partly because CDK uploads no source maps by default. Stacktape's uploads also
-  contain TypeScript (about 10 MB compressed): Prisma lists it as an optional peer dependency, and Stacktape installs
-  it next to PDFKit. A bare `docker build` of the plain Dockerfile that SST and CDK use was faster than Stacktape's
-  container build, from an empty build cache and after a source change; that build time is part of each deploy
-  result. The published results will show every case where Stacktape loses.
+- **Stacktape does not have to win.** The published results will show every test where another tool is faster or
+  smaller. Source maps count toward the upload size of the tools that upload them (SST and Stacktape), and AWS CDK
+  uploads none by default.
 - **The tools roll out changes differently.** Serverless Framework and AWS CDK go through CloudFormation. Stacktape
   and CDK with hotswap update code directly. SST uses Pulumi. Render, Heroku and Ravion run their own pipelines. We
   measure each tool's normal path; the guarantees are not the same.
@@ -199,29 +289,45 @@ query compiler is plain JavaScript and WebAssembly in Prisma 7. `prisma generate
   manual cache reset.
 - **One machine, one region, one period.** The results describe this setup, not every project.
 
-## Rerun everything yourself
+## Run the benchmark
 
-You need Node.js 22 or newer, npm, Git, Docker with BuildKit, `zip`, the AWS CLI and a disposable AWS account.
-Everything the benchmark creates is named `bmk-*`. Run on a dedicated machine in the same region as the deployments;
-we use EC2.
-
-```sh
-npm install                  # the AWS SDK used to invoke functions
-export AWS_PROFILE=...       # credentials for the disposable account
-export BENCH_REGION=eu-west-1
-```
-
-**Serverless Framework** needs `SERVERLESS_ACCESS_KEY`, or `serverless login` once.
-
-**Stacktape** needs a binary and the name of the AWS account connected in the Stacktape Console. Check that the name
-belongs to the same account as `AWS_PROFILE` with `stacktape info:whoami`.
+Run on a dedicated machine in `eu-west-1`, the region of the deployments; we use EC2. Everything the benchmark
+creates is named `bmk-*`. Install the harness's own dependency (the AWS SDK, to invoke functions) and set the
+credentials from the [table above](#reproduce-one-test):
 
 ```sh
-export STACKTAPE_BIN=$(which stacktape)        # or a binary built from source, see below
-export STACKTAPE_AWS_ACCOUNT=<connection name>
+npm ci
+export AWS_PROFILE=...
 ```
 
-To build Stacktape from source, as we do:
+Tools are `stacktape`, `serverless`, `sst`, `cdk`, `cdk-hotswap`, `render`, `heroku` and `ravion`. Applications are
+`lambda-1`, `lambda-5`, `lambda-25`, `container-node`, `container-python` and `five-services`.
+
+```sh
+node bench.mjs setup   sst lambda-5                         # write the project and deploy it (not measured)
+node bench.mjs package sst lambda-5 --runs 10               # package from an empty build cache
+node bench.mjs package sst lambda-5 --runs 10 --warm        # package after a source change
+node bench.mjs package sst container-node                   # container image size
+node bench.mjs deploy  sst lambda-5 --runs 10               # deploy a code change from this machine
+node bench.mjs deploy  sst lambda-5 --runs 10 --change shared   # change the shared service package instead
+node bench.mjs remove  sst lambda-5                         # delete everything setup created
+node report.mjs                                             # median, fastest and slowest run of every series
+```
+
+`setup` writes the test's branch to `work/bmk-<tool>-<app>/` as its own Git repository, with the same commit as the
+published branch, and installs its locked dependencies. Command logs are in `logs/`. SST's function packaging needs
+a deployed stage, so run `setup` first. To spread network and AWS variation evenly, run one round of every tool
+before the next round:
+
+```sh
+for round in $(seq 10); do
+  for tool in stacktape serverless sst cdk cdk-hotswap; do node bench.mjs deploy $tool lambda-25 --runs 1; done
+done
+```
+
+### Build Stacktape from source
+
+The published results use a Stacktape CLI built from source. Each result records the commit in `stacktapeCommit`.
 
 ```sh
 git clone https://github.com/stacktape/stacktape && cd stacktape
@@ -232,50 +338,87 @@ bun scripts/build-dist-package.ts --platform linux --version 4.0.0-bench.$(git r
 export STACKTAPE_BIN=$PWD/__dist/linux/stacktape STACKTAPE_COMMIT=$(git rev-parse HEAD)
 ```
 
-Run a series. Tools are `stacktape`, `serverless`, `sst`, `cdk`, `cdk-hotswap`, `render`, `heroku` and `ravion`.
-Applications are `lambda-1`, `lambda-5`, `lambda-25`, `node`, `python` and `five-services`.
-
-```sh
-node bench.mjs setup   sst lambda-5             # create the project and deploy it (not measured)
-node bench.mjs package sst lambda-5 --runs 10   # package from an empty build cache
-node bench.mjs package sst node                 # container image size
-node bench.mjs deploy  sst lambda-5 --runs 10   # deploy a change from this machine
-node bench.mjs remove  sst lambda-5             # delete everything setup created
-node report.mjs                                 # median, fastest and slowest run of every series
-```
-
-Each project is written to `work/bmk-<tool>-<app>/` as its own Git repository, with the tool installed from the
-project's `package.json`. Command logs are in `logs/`. SST's function packaging needs a deployed stage, so run `setup`
-first. To spread network and AWS variation evenly, run one round of every tool before the next round:
-
-```sh
-for round in $(seq 10); do
-  for tool in stacktape serverless sst cdk cdk-hotswap; do node bench.mjs deploy $tool lambda-25 --runs 1; done
-done
-```
-
 ### Git push runs
 
-`node bench.mjs push <tool> <app> --runs 5` commits a change, pushes `main` to the project's `origin` remote and
-measures until the new code answers. Each run is a pair: a first push with an empty build cache, then a second push
-15 minutes after the first one finished. Before you start, create a GitHub repository for the project, add it as
-`origin` in `work/bmk-<tool>-<app>/`, push once, and connect the deploy service:
+`node bench.mjs push <tool> <app> --runs 5` commits a change to the project in `work/`, pushes it to the test's
+branch on the project's `origin` remote and measures until the new code answers. Each run is a pair: a first push
+with an empty build cache, then a second push 15 minutes after the first one finished.
 
-- **Serverless Framework, SST, AWS CDK:** the project contains `.github/workflows/deploy.yml`. Add the repository
-  secrets `AWS_ROLE_ARN` (a role this repository can assume through GitHub OIDC) and, for Serverless,
-  `SERVERLESS_ACCESS_KEY`. The first push of each pair deletes the repository's Actions caches with
-  `gh cache delete --all`.
-- **Stacktape:** connect the repository in the Stacktape Console. The runner uses the Stacktape version set in the
-  Console, so publish the binary you measure first. To empty its caches, delete the project's runner in the Console
-  and pass `--cold-reset manual`.
-- **Render:** create a Blueprint from the project's `render.yaml` and set `RENDER_API_KEY`. To empty the build cache,
-  use "Clear build cache & deploy" on the previous commit, wait for it, then pass `--cold-reset manual`.
-- **Heroku:** run `heroku login` and `heroku plugins:install @heroku-cli/plugin-builds`. `setup` creates the apps.
-  Connect each app to the GitHub repository and turn on automatic deploys. The first push of each pair empties the
-  build cache with `heroku builds:cache:purge`.
-- **Ravion:** connect the GitHub repository and the AWS account in Ravion, add one web module per service with the
-  default builder, and turn on deploy on push. Set `RAVION_URL_API` (and `RAVION_URL_REPORTING` and so on for five
-  services) to the service URLs. Reset the cache by hand and pass `--cold-reset manual`.
+You need a fork of this repository with all branches (untick "Copy the main branch only"), because the platforms
+deploy from your fork's branch. The project that `setup` writes has the same commit as the published branch, so its
+pushes continue your fork's branch. After `setup`, add your fork as the project's `origin`:
+
+```sh
+git -C work/bmk-<tool>-<app> remote add origin git@github.com:<you>/deploy-benchmarks.git
+```
+
+Then connect the deploy service to your fork's branch. Each test branch's README has these steps for its
+application:
+
+<!-- generated:git-push-setup -->
+
+**Stacktape**
+
+- In the Stacktape Console, connect your fork and the test's branch to the project, with the stage `bmk` in `eu-west-1`. The Console runner builds in your AWS account with the Stacktape version set in the Console, so set the version you measure there.
+- To empty the runner's caches before each first push, delete the project's runner in the Console and pass `--cold-reset manual`.
+
+**Serverless Framework**
+
+- Turn on GitHub Actions in your fork. This branch's `.github/workflows/deploy.yml` deploys every push to the branch.
+- Add the repository secrets `AWS_ROLE_ARN` and `SERVERLESS_ACCESS_KEY`. `AWS_ROLE_ARN` is a role in the disposable account that the fork can assume through GitHub OIDC.
+- Sign `gh` in to an account that can manage the fork's Actions caches (`gh auth login` or `GH_TOKEN`). The first push of each pair deletes them with `gh cache delete --all`.
+
+**SST**
+
+- Turn on GitHub Actions in your fork. This branch's `.github/workflows/deploy.yml` deploys every push to the branch.
+- Add the repository secret `AWS_ROLE_ARN`. `AWS_ROLE_ARN` is a role in the disposable account that the fork can assume through GitHub OIDC.
+- Sign `gh` in to an account that can manage the fork's Actions caches (`gh auth login` or `GH_TOKEN`). The first push of each pair deletes them with `gh cache delete --all`.
+
+**AWS CDK**
+
+- Turn on GitHub Actions in your fork. This branch's `.github/workflows/deploy.yml` deploys every push to the branch.
+- Add the repository secret `AWS_ROLE_ARN`. `AWS_ROLE_ARN` is a role in the disposable account that the fork can assume through GitHub OIDC.
+- Sign `gh` in to an account that can manage the fork's Actions caches (`gh auth login` or `GH_TOKEN`). The first push of each pair deletes them with `gh cache delete --all`.
+
+**AWS CDK with hotswap**: no Git push test.
+
+**Render**
+
+- In the Render dashboard, create a Blueprint from your fork and the test's branch. Render reads `render.yaml` and deploys.
+- Render has no command that only empties the build cache. Before each first push, use "Clear build cache & deploy" on the previous commit, wait for that deploy to finish, and pass `--cold-reset manual`.
+
+**Heroku**
+
+- `node bench.mjs setup` creates the Heroku app. In the Heroku dashboard, connect it to your fork and the test's branch, and turn on automatic deploys.
+- The first push of each pair empties the build cache with `heroku builds:cache:purge`.
+
+**Ravion**
+
+- In Ravion, connect your fork and your AWS account.
+- Add one web module with the repository root as its source directory and the default builder, and turn on deploy on push for the test's branch.
+- Set the `RAVION_URL_*` variables to the service URLs.
+- Ravion has no command that empties its build cache. Reset it by hand before each first push and pass `--cold-reset manual`.
+
+<!-- /generated:git-push-setup -->
+
+For Render, Ravion and Heroku, connect the platform before `setup`: they deploy only from Git, and `setup` checks the
+deployed services.
+
+## Regenerate the configurations and branches
+
+The test branches and [`configs/`](configs) are generated from [`tools/`](tools), [`fixtures/`](fixtures),
+[`lib.mjs`](lib.mjs) and [`project.mjs`](project.mjs). Don't edit them by hand. After a change to those files:
+
+```sh
+node configs.mjs           # rewrite configs/, the pinned lockfiles and the generated parts of this README
+git commit -am "..."       # the branches are generated from committed files
+node branches.mjs --push   # rebuild every <app>/<tool> branch and force-push it
+node branches.mjs --check  # confirm that every branch on GitHub matches main
+```
+
+`node configs.mjs` keeps the versions in each lockfile unless a pinned tool version changes. Each branch is a single
+commit with a fixed author and date, so the same files always give the same commit, on any machine.
+`node configs.mjs --check` and `node branches.mjs --check` change nothing and fail when something is out of date.
 
 ## Repository layout
 
@@ -283,8 +426,10 @@ measures until the new code answers. Each run is a pair: a first push with an em
 | --- | --- |
 | [`bench.mjs`](bench.mjs) | The runner: `setup`, `package`, `deploy`, `push` and `remove` |
 | [`lib.mjs`](lib.mjs) | The applications, the change, running commands, the probes, the shared Dockerfile and workflow |
-| [`tools/`](tools) | One module per tool: its configuration, commands, artifacts and addresses |
-| [`configs/`](configs) | The configuration files each tool gets, generated by `node configs.mjs` |
+| [`project.mjs`](project.mjs) | The project of each test: the files, the commit and the branch README |
+| [`tools/`](tools) | One module per tool: its configuration, commands, artifacts, addresses and setup notes |
+| [`configs/`](configs) | The files each tool adds to each application, with their lockfiles, generated by `node configs.mjs` |
+| [`branches.mjs`](branches.mjs) | Generates the `<app>/<tool>` branches |
 | [`report.mjs`](report.mjs) | Prints the median, fastest and slowest run of every series |
 | [`fixtures/`](fixtures) | The test applications |
 
@@ -293,3 +438,7 @@ measures until the new code answers. Each run is a pair: a first push with an em
 We want each tool to look the way its users would set it up. If a configuration here is worse than what you would
 use, or a measurement favors one tool, please open an issue in this repository. Tell us what you would change and,
 if you can, link the documentation that supports it. We will rerun the affected tests.
+
+## License
+
+[MIT](LICENSE)

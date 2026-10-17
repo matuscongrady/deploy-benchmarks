@@ -2,7 +2,7 @@
 // Git push journey: the shared GitHub Actions workflow. (SST's own Autodeploy needs an SST Console account.)
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE_IMAGES, capture, dockerBuild, dockerfile, findFunctions, imageBytes, REGION, serviceDir, STAGE } from '../lib.mjs';
+import { BASE_IMAGES, capture, dockerBuild, dockerfile, findFunctions, githubActionsSetup, imageBytes, REGION, serviceDir, STAGE } from '../lib.mjs';
 
 const sst = ['npx', 'sst'];
 const pascal = (s) => s.replace(/(^|-)(.)/g, (_, __, c) => c.toUpperCase());
@@ -41,9 +41,15 @@ ${body}
 }
 
 export default {
-  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'node', 'python', 'five-services'],
+  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'container-node', 'container-python', 'five-services'],
   devDependencies: { sst: '4.17.2' },
   gitDeploy: 'github-actions',
+  docs: {
+    name: 'SST',
+    version: 'SST 4.17.2, installed by `npm ci`. `sst install` adds its AWS provider during setup.',
+    credentials: ['`AWS_PROFILE`: a profile for the disposable AWS account.'],
+    gitPush: () => githubActionsSetup(['AWS_ROLE_ARN'])
+  },
   files(ctx) {
     const files = { 'sst.config.ts': config(ctx) };
     if (ctx.app.kind === 'service') for (const s of Object.keys(ctx.app.services)) Object.assign(files, dockerfile(ctx.app, s));

@@ -2,7 +2,7 @@
 // Git push journey: the shared GitHub Actions workflow (Serverless v4 has no Git deployment service of its own).
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { capture, findFunctions, REGION, STAGE } from '../lib.mjs';
+import { capture, findFunctions, githubActionsSetup, REGION, STAGE } from '../lib.mjs';
 
 const VERSION = '4.44.0';
 // The Serverless service is the functions package of the monorepo, the usual layout: Serverless installs the
@@ -42,6 +42,16 @@ export default {
   apps: ['lambda-1', 'lambda-5', 'lambda-25'],
   devDependencies: { serverless: VERSION },
   gitDeploy: 'github-actions',
+  docs: {
+    name: 'Serverless Framework',
+    account: 'a Serverless Framework account',
+    version: `Serverless Framework ${VERSION}, installed by \`npm ci\` and pinned with \`frameworkVersion\` in \`serverless.yml\`.`,
+    credentials: [
+      '`AWS_PROFILE`: a profile for the disposable AWS account.',
+      '`SERVERLESS_ACCESS_KEY`, or run `npm exec --workspace=packages/functions -- serverless login` once.'
+    ],
+    gitPush: () => githubActionsSetup(['AWS_ROLE_ARN', 'SERVERLESS_ACCESS_KEY'])
+  },
   files: (ctx) => ({ [`${SERVICE}/serverless.yml`]: config(ctx) }),
   version: ({ dir }) => capture(['sh', '-c', `${sls.join(' ')} --version 2>&1`], dir).match(/Framework (\S+)/)?.[1],
   buildOutputs: [`${SERVICE}/.serverless`],

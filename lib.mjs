@@ -2,13 +2,15 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { cpus, hostname, tmpdir, totalmem } from 'node:os';
+import { cpus, tmpdir, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InvokeCommand, LambdaClient, ListFunctionsCommand } from '@aws-sdk/client-lambda';
 
 export const ROOT = dirname(fileURLToPath(import.meta.url));
-export const REGION = process.env.BENCH_REGION ?? 'eu-west-1';
+// Every deployment runs in this region. The configurations in configs/ and in the test branches contain it, so to use
+// another region, change it here and run `node configs.mjs` and `node branches.mjs`.
+export const REGION = 'eu-west-1';
 export const STAGE = 'bmk';
 const manifest = JSON.parse(readFileSync(join(ROOT, 'fixtures/manifest.json'), 'utf8'));
 
@@ -23,8 +25,8 @@ export const APPS = {
   'lambda-1': lambdaApp(1),
   'lambda-5': lambdaApp(5),
   'lambda-25': lambdaApp(25),
-  node: { id: 'node', kind: 'service', language: 'node', services: { api: manifest.containers[0] }, changed: ['api'] },
-  python: { id: 'python', kind: 'service', language: 'python', services: { api: manifest.containers[1] }, changed: ['api'] },
+  'container-node': { id: 'container-node', kind: 'service', language: 'node', services: { api: manifest.containers[0] }, changed: ['api'] },
+  'container-python': { id: 'container-python', kind: 'service', language: 'python', services: { api: manifest.containers[1] }, changed: ['api'] },
   'five-services': { id: 'five-services', kind: 'service', language: 'node', services, changed: ['api', 'reporting', 'notifications'] }
 };
 
@@ -46,6 +48,11 @@ export function copyAppSource(app, dir) {
       return !match || app.functions.includes(match[1]);
     };
     cpSync(src, dir, { recursive: true, filter: keep });
+    // The `check` script runs check.mjs, which stays in fixtures/ with the manifest it reads.
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    delete pkg.scripts.check;
+    if (!Object.keys(pkg.scripts).length) delete pkg.scripts;
+    writeFileSync(join(dir, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
     return;
   }
   const skip = (path) => !/(node_modules|\.venv|__pycache__|check\.mjs|check\.py|requirements-check)/.test(path);
@@ -229,9 +236,12 @@ export async function waitForRevisions(app, addresses, expected, { field, change
   return readyAt;
 }
 
-/** Describes the machine that ran the measurement. On EC2 it adds the instance type and region. */
+/**
+ * Describes the machine that ran the measurement. On EC2 it adds the instance type and region. The host name is left
+ * out because results are published.
+ */
 export async function machine() {
-  const info = { hostname: hostname(), cpu: cpus()[0].model, cpus: cpus().length, memoryGb: Math.round(totalmem() / 2 ** 30), node: process.version };
+  const info = { cpu: cpus()[0].model, cpus: cpus().length, memoryGb: Math.round(totalmem() / 2 ** 30), node: process.version };
   try {
     const imds = 'http://169.254.169.254/latest';
     const token = await fetch(`${imds}/api/token`, {
@@ -286,12 +296,13 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "3000"]
 /**
  * GitHub Actions workflow for tools without their own Git deployment service. Every such tool gets the same steps:
  * a fresh runner, Node 22 with npm's download cache, AWS credentials through OIDC, `npm ci`, then the tool's deploy.
+ * It runs on pushes to the project's branch.
  */
-export function githubWorkflow(deploy) {
+export function githubWorkflow(deploy, branch) {
   return `name: deploy
 on:
   push:
-    branches: [main]
+    branches: ['${branch}']
 permissions:
   id-token: write
   contents: read
@@ -312,6 +323,13 @@ jobs:
       - run: ${deploy.join(' ')}${deploy.includes('serverless') ? '\n        env:\n          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}' : ''}
 `;
 }
+
+/** Setup steps for a Git push test that deploys with the workflow above. */
+export const githubActionsSetup = (secrets) => [
+  "Turn on GitHub Actions in your fork. This branch's `.github/workflows/deploy.yml` deploys every push to the branch.",
+  `Add the repository secret${secrets.length > 1 ? 's' : ''} ${secrets.map((s) => `\`${s}\``).join(' and ')}. \`AWS_ROLE_ARN\` is a role in the disposable account that the fork can assume through GitHub OIDC.`,
+  "Sign `gh` in to an account that can manage the fork's Actions caches (`gh auth login` or `GH_TOKEN`). The first push of each pair deletes them with `gh cache delete --all`."
+];
 
 /** Builds a service image the way SST and CDK do: `docker build` of the service's Dockerfile. */
 export const dockerBuild = (app, service, tag) => ['docker', 'build', '-t', tag, serviceDir(app, service)];

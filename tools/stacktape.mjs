@@ -7,9 +7,11 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { capture, findFunctions, imageBytes, REGION, serviceDir, STAGE, stackOutputs, zipSize } from '../lib.mjs';
 
-const bin = process.env.STACKTAPE_BIN ?? 'stacktape';
+// `docs` is set when the commands are written into a branch README rather than run.
+const bin = ({ docs } = {}) => (docs ? 'stacktape' : (process.env.STACKTAPE_BIN ?? 'stacktape'));
 const common = ['--stage', STAGE, '--region', REGION];
-function account() {
+function account({ docs }) {
+  if (docs) return ['--awsAccount', '<connection-name>'];
   if (!process.env.STACKTAPE_AWS_ACCOUNT) throw new Error('Set STACKTAPE_AWS_ACCOUNT to the Console connection name of the AWS account to deploy to');
   return ['--awsAccount', process.env.STACKTAPE_AWS_ACCOUNT];
 }
@@ -41,12 +43,28 @@ function config({ app, name }) {
 }
 
 export default {
-  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'node', 'python', 'five-services'],
+  apps: ['lambda-1', 'lambda-5', 'lambda-25', 'container-node', 'container-python', 'five-services'],
+  docs: {
+    name: 'Stacktape',
+    account: 'a Stacktape account with the AWS account connected',
+    version:
+      'The Stacktape CLI built from source of [stacktape/stacktape](https://github.com/stacktape/stacktape), as described in the main README. Each result records the commit (`stacktapeCommit`).',
+    credentials: [
+      '`AWS_PROFILE`: a profile for the disposable AWS account. The harness uses it to call the deployed code and read stack outputs.',
+      '`STACKTAPE_API_KEY`, or run `stacktape login` once.',
+      '`STACKTAPE_AWS_ACCOUNT`: the name of the AWS account connection in the Stacktape Console. Stacktape deploys with credentials from that connection, not with `AWS_PROFILE`, so check with `stacktape info:whoami` that both point to the same account.',
+      '`STACKTAPE_BIN`: the path of the Stacktape binary to measure.'
+    ],
+    gitPush: () => [
+      'In the Stacktape Console, connect your fork and this branch to the project, with the stage `bmk` in `eu-west-1`. The Console runner builds in your AWS account with the Stacktape version set in the Console, so set the version you measure there.',
+      "To empty the runner's caches before each first push, delete the project's runner in the Console and pass `--cold-reset manual`."
+    ]
+  },
   // JSON is valid YAML.
   files: (ctx) => ({ 'stacktape.yml': JSON.stringify(config(ctx), null, 2) }),
-  version: () => capture([bin, 'version']).match(/version: (\S+?)\.?$/m)?.[1],
+  version: () => capture([bin(), 'version']).match(/version: (\S+?)\.?$/m)?.[1],
   buildOutputs: ['.stacktape'],
-  package: () => [bin, 'package', ...common],
+  package: (ctx) => [bin(ctx), 'package', ...common],
   // `package` writes the function ZIPs and, beside them, the source maps that deploy uploads separately
   // (`*.source-maps.json`, gzip-compressed as `*.source-maps.json.gz` by newer builds). Shared layers are zipped only
   // during deploy, so we zip their directories here, storing their `node_modules` links as links as Stacktape's own
@@ -66,8 +84,8 @@ export default {
     ];
   },
   // Code-only changes are updated directly (without CloudFormation) by the default deploy.
-  deploy: () => [bin, 'deploy', ...common, ...account(), '--autoConfirmOperation'],
-  remove: () => [bin, 'delete', ...common, ...account(), '--autoConfirmOperation'],
+  deploy: (ctx) => [bin(ctx), 'deploy', ...common, ...account(ctx), '--autoConfirmOperation'],
+  remove: (ctx) => [bin(ctx), 'delete', ...common, ...account(ctx), '--autoConfirmOperation'],
   addresses({ app, name }) {
     if (app.kind === 'lambda') return findFunctions(`${name}-${STAGE}-`, app.functions);
     const outputs = stackOutputs(`${name}-${STAGE}`);

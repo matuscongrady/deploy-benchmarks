@@ -30,7 +30,19 @@ const blueprint = ({ app, name }) =>
     .join('\n')}\n`;
 
 export default {
-  apps: ['node', 'python', 'five-services'],
+  apps: ['container-node', 'container-python', 'five-services'],
+  remoteBuild: true,
+  docs: {
+    name: 'Render',
+    account: 'a Render account',
+    region: 'Render runs the services in its default region.',
+    version: "Hosted by Render: its native Node.js and Python runtimes on Starter instances. Render doesn't offer a choice of build image version.",
+    credentials: ['`RENDER_API_KEY`: the harness reads service URLs and build events through the Render API.'],
+    gitPush: () => [
+      'In the Render dashboard, create a Blueprint from your fork and this branch. Render reads `render.yaml` and deploys.',
+      'Render has no command that only empties the build cache. Before each first push, use "Clear build cache & deploy" on the previous commit, wait for that deploy to finish, and pass `--cold-reset manual`.'
+    ]
+  },
   files: (ctx) => ({ 'render.yaml': blueprint(ctx) }),
   version: () => 'hosted',
   remove: () => {
