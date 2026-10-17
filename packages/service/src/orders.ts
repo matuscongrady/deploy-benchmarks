@@ -3,7 +3,7 @@ import { v5 as uuidv5 } from 'uuid';
 import { Decimal, prisma } from './db';
 
 /** Changes when this module changes; every response reports it, so a deploy test can tell old code from new. */
-export const serviceRevision = 'baseline';
+export const serviceRevision = 'r1792250619686';
 
 const ID_NAMESPACE = '6f1c4d7e-2b8a-4c3e-9f50-1a2b3c4d5e6f';
 /** A stable ID for the same input, so a retried message creates the same record. */
