@@ -45,10 +45,16 @@ export default {
     }),
   addresses: ({ app, dir }) => Object.fromEntries(targetNames(app).map((s) => [s, info(dir, s).app.web_url])),
   resetCache: ({ app, dir, run }) => Promise.all(app.changed.map((s) => run(['heroku', 'builds:cache:purge', '--app', appName(dir, s), '--confirm', appName(dir, s)]))),
-  // Build duration and compressed slug size of the newest build of each changed app.
+  // Build duration and compressed slug size of the newest build of each changed app, from the Platform API (the
+  // CLI's `builds` command has no JSON output).
   buildInfo: ({ app, dir }) =>
-    app.changed.map((s) => {
-      const [build] = JSON.parse(capture(['heroku', 'builds', '--app', appName(dir, s), '--json', '--num', '1'], dir));
-      return { service: s, buildMs: Date.parse(build.updated_at) - Date.parse(build.created_at), bytes: info(dir, s).app.slug_size };
-    })
+    Promise.all(
+      app.changed.map(async (s) => {
+        const response = await fetch(`https://api.heroku.com/apps/${appName(dir, s)}/builds`, {
+          headers: { accept: 'application/vnd.heroku+json; version=3', authorization: `Bearer ${capture(['heroku', 'auth:token'])}`, range: 'created_at; order=desc, max=1' }
+        });
+        const [build] = await response.json();
+        return { service: s, buildMs: Date.parse(build.updated_at) - Date.parse(build.created_at), bytes: info(dir, s).app.slug_size };
+      })
+    )
 };

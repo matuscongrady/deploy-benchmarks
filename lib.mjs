@@ -334,5 +334,14 @@ export const githubActionsSetup = (secrets) => [
 /** Builds a service image the way SST and CDK do: `docker build` of the service's Dockerfile. */
 export const dockerBuild = (app, service, tag) => ['docker', 'build', '-t', tag, serviceDir(app, service)];
 
-/** Compressed size of a local image, which is what a registry push uploads when the registry has no layers yet. */
-export const imageBytes = (tag) => Number(capture(['docker', 'image', 'inspect', tag, '--format', '{{.Size}}']));
+/**
+ * Compressed size of a local image, which is what a registry push uploads when the registry has no layers yet. Only
+ * Docker's containerd image store (the default of Docker Desktop and Docker Engine 29) reports it; the older overlay2
+ * store reports the unpacked size.
+ */
+export function imageBytes(tag) {
+  if (!capture(['docker', 'info', '--format', '{{json .DriverStatus}}']).includes('io.containerd.snapshotter')) {
+    throw new Error("Image sizes need Docker's containerd image store; see https://docs.docker.com/engine/storage/containerd/");
+  }
+  return Number(capture(['docker', 'image', 'inspect', tag, '--format', '{{.Size}}']));
+}
