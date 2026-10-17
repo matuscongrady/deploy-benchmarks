@@ -3,6 +3,7 @@ services:
     name: bmk-render-five-services-api
     runtime: node
     plan: starter
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
@@ -11,6 +12,7 @@ services:
     name: bmk-render-five-services-reporting
     runtime: node
     plan: starter
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
@@ -19,6 +21,7 @@ services:
     name: bmk-render-five-services-inventory
     runtime: node
     plan: starter
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
@@ -27,6 +30,7 @@ services:
     name: bmk-render-five-services-webhooks
     runtime: node
     plan: starter
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
@@ -35,6 +39,7 @@ services:
     name: bmk-render-five-services-notifications
     runtime: node
     plan: starter
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health

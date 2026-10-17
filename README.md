@@ -43,7 +43,7 @@ Replace `sst lambda-25` with any tool and application from the list of branches.
 | SST | `AWS_PROFILE`: a profile for the disposable AWS account. |
 | AWS CDK | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
 | AWS CDK with hotswap | `AWS_PROFILE`: a profile for the disposable AWS account. `cdk bootstrap` runs once during setup. |
-| Render | `RENDER_API_KEY`: the harness reads service URLs and build events through the Render API. |
+| Render | `RENDER_API_KEY`: the harness creates the services, reads their URLs and build events and empties their build caches through the Render API.<br>`BENCH_FORK`: the URL of your fork. Render's GitHub app must have access to it. |
 | Heroku | `HEROKU_API_KEY`, or run `heroku login` once.<br>The builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`. |
 | Ravion | Run `ravion login` once.<br>`RAVION_URL_API`, and for five services also `RAVION_URL_REPORTING`, `RAVION_URL_INVENTORY`, `RAVION_URL_WEBHOOKS` and `RAVION_URL_NOTIFICATIONS`: the URL of each service. |
 
@@ -361,6 +361,7 @@ application:
 
 - In the Stacktape Console, connect your fork and the test's branch to the project, with the stage `bmk` in `eu-west-1`. The Console runner builds in your AWS account with the Stacktape version set in the Console, so set the version you measure there.
 - To empty the runner's caches before each first push, delete the project's runner in the Console and pass `--cold-reset manual`.
+- The Console runner installs Stacktape from npm, so this test needs a published version. The pinned commit above is not published, so the qualification results have no Stacktape Git push test.
 
 **Serverless Framework**
 
@@ -384,8 +385,8 @@ application:
 
 **Render**
 
-- In the Render dashboard, create a Blueprint from your fork and the test's branch. Render reads `render.yaml` and deploys.
-- Render has no command that only empties the build cache. Before each first push, use "Clear build cache & deploy" on the previous commit, wait for that deploy to finish, and pass `--cold-reset manual`.
+- Install Render's GitHub app on your fork. With `BENCH_FORK` set, `node bench.mjs setup` creates the services of `render.yaml` through the Render API, deploying the test's branch of your fork on every push. A Blueprint created from `render.yaml` in the Render dashboard is the same.
+- The first push of each pair starts with a "Clear build cache & deploy" of the previous commit through the Render API and waits until it is live.
 
 **Heroku**
 

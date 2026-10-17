@@ -198,9 +198,9 @@ export function readme(t) {
       '',
       ...commented([
         ...(does.deploy ? [] : [[`git clone ${REPOSITORY} && cd deploy-benchmarks`], ['npm ci']]),
-        [`node bench.mjs setup ${toolName} ${appId}`, does.deploy ? 'skip if you already ran it' : 'write the project to work/ and check the deployed service'],
-        [`git -C work/${name} remote add origin git@github.com:<you>/deploy-benchmarks.git`],
-        [`node bench.mjs push ${toolName} ${appId} --runs 5${manualReset ? ' --cold-reset manual' : ''}`],
+        ['export BENCH_FORK=https://github.com/<you>/deploy-benchmarks', "setup adds it as the project's origin"],
+        [`node bench.mjs setup ${toolName} ${appId}`, does.deploy ? 'skip if you already ran it with BENCH_FORK set' : 'write the project to work/ and check the deployed service'],
+        [`node bench.mjs push ${toolName} ${appId} --runs 10${manualReset ? ' --cold-reset manual' : ''}`],
         ['node report.mjs']
       ]),
       ''
@@ -221,6 +221,7 @@ export function readme(t) {
         ...installs,
         ...(tool.setup?.(docs) ?? []).map(shell),
         ...commands(first),
+        ...(tool.afterFirstDeploy?.(docs) ?? []).map(shell),
         ...(tool.firstDeploy ? ['# after a code change:', ...commands(tool.deploy(docs))] : []),
         '# delete everything:',
         ...commands(tool.remove(docs))

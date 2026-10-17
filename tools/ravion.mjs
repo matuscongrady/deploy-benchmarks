@@ -30,12 +30,13 @@ export default {
   },
   addresses: ({ app }) => Object.fromEntries(targetNames(app).map((s) => [s, process.env[`RAVION_URL_${s.toUpperCase()}`]])),
   // Ravion has no documented command that clears its build cache; run cold pushes with --cold-reset manual.
-  // Build duration of the build steps of pipeline runs started after the push. Not yet checked against a real run.
+  // Build duration of the build steps of pipeline runs started after the push. Steps report `completedAt`, as in the
+  // pipeline runs we inspected; not yet checked in a measured run.
   buildInfo: ({ pushedAt }) =>
     ravion('pipeline', 'run', 'list')
       .filter((run) => Date.parse(run.createdAt) >= Date.parse(pushedAt))
       .map((run) => {
         const steps = (ravion('pipeline', 'run', 'get', run.id).steps ?? []).filter((step) => /build/i.test(step.name));
-        return { run: run.id, buildMs: steps.reduce((sum, step) => sum + Date.parse(step.finishedAt) - Date.parse(step.startedAt), 0), bytes: null };
+        return { run: run.id, buildMs: steps.reduce((sum, step) => sum + Date.parse(step.completedAt) - Date.parse(step.startedAt), 0), bytes: null };
       })
 };

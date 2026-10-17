@@ -1,4 +1,5 @@
-// Heroku (Cedar) with the official Node.js and Python buildpacks. Each service is its own Heroku app.
+// Heroku (Cedar) with the official Node.js and Python buildpacks, one Basic dyno per app in the EU region. Each service
+// is its own Heroku app.
 // Needs a logged-in Heroku CLI and the builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`.
 // CLI deploy: `git push` to Heroku's Git remote. Git push journey: Heroku's GitHub integration with automatic
 // deploys, connected by hand in the Heroku dashboard. It builds only the repository root, so not five-services.
@@ -14,7 +15,7 @@ export default {
   docs: {
     name: 'Heroku',
     account: ['the Heroku CLI', 'a Heroku account'],
-    region: 'Heroku runs the apps in its default region.',
+    region: "The apps run in Heroku's EU region (Dublin), the closest to `eu-west-1`, each on one Basic dyno (512 MB), which is always on.",
     configNote: 'Heroku needs no configuration: the application already has a `Procfile` and runtime version files.',
     version: "Hosted by Heroku: the default stack and the official Node.js and Python buildpacks. Heroku doesn't offer a choice of buildpack version.",
     credentials: ['`HEROKU_API_KEY`, or run `heroku login` once.', 'The builds plugin: `heroku plugins:install @heroku-cli/plugin-builds`.'],
@@ -28,8 +29,12 @@ export default {
   },
   files: () => ({}), // The fixtures already contain a Procfile and runtime version files.
   version: () => capture(['heroku', '--version']).split(' ')[0],
-  // `heroku create` picks a free app name and adds a Git remote. The default stack and dyno type are kept.
-  setup: ({ app }) => targetNames(app).map((s) => ['heroku', 'create', '--remote', remote(s)]),
+  // `heroku create` picks a free app name and adds a Git remote. The default stack is kept.
+  setup: ({ app }) => targetNames(app).map((s) => ['heroku', 'create', '--region', 'eu', '--remote', remote(s)]),
+  // One Basic dyno, like a Render Starter instance or a small Fargate task: always on, unlike Eco dynos, which sleep.
+  // The dyno type can be set only once the app has a release.
+  afterFirstDeploy: ({ app, dir, docs }) =>
+    targetNames(app).map((s) => ['heroku', 'ps:type', 'web=basic', '--app', docs ? `<${s}-app-name>` : appName(dir, s)]),
   // A service in a subdirectory is pushed with `git subtree push`, because Heroku builds the repository root.
   deploy: ({ app }, targets = app.changed) =>
     targets.map((s) => (app.id === 'five-services' ? ['git', 'subtree', 'push', '--prefix', s, remote(s), 'main'] : ['git', 'push', remote(s), 'HEAD:main'])),

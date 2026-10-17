@@ -1,4 +1,4 @@
-// Stacktape, run from the binary in STACKTAPE_BIN (a release build of the CLI).
+// Stacktape, run from the binary in STACKTAPE_BIN: a release build of the CLI from COMMIT of stacktape/stacktape.
 // Stacktape deploys into an AWS account connected in the Stacktape Console, with credentials the Console issues, not
 // with AWS_PROFILE. STACKTAPE_AWS_ACCOUNT names that connection; it must be the account AWS_PROFILE points to.
 // Git push journey: Stacktape Console GitOps (the project's GitHub repository connected in the Console). The Console
@@ -6,6 +6,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { capture, findFunctions, imageBytes, REGION, serviceDir, STAGE, stackOutputs, zipSize } from '../lib.mjs';
+
+// The stacktape/stacktape commit the published results were measured with. `version` checks that STACKTAPE_BIN was
+// built from it (the build's version ends in the short commit).
+const COMMIT = 'd51f56ad17b9a24056046d7af99bd3716afb30da';
 
 // `docs` is set when the commands are written into a branch README rather than run.
 const bin = ({ docs } = {}) => (docs ? 'stacktape' : (process.env.STACKTAPE_BIN ?? 'stacktape'));
@@ -44,11 +48,12 @@ function config({ app, name }) {
 
 export default {
   apps: ['lambda-1', 'lambda-5', 'lambda-25', 'container-node', 'container-python', 'five-services'],
+  commit: COMMIT,
   docs: {
     name: 'Stacktape',
     account: 'a Stacktape account with the AWS account connected',
     version:
-      'The Stacktape CLI built from source of [stacktape/stacktape](https://github.com/stacktape/stacktape), as described in the main README. Each result records the commit (`stacktapeCommit`).',
+      `The Stacktape CLI built from source of [stacktape/stacktape](https://github.com/stacktape/stacktape) at commit [\`${COMMIT.slice(0, 8)}\`](https://github.com/stacktape/stacktape/commit/${COMMIT}), as described in the main README. Each result records the commit (\`stacktapeCommit\`).`,
     credentials: [
       '`AWS_PROFILE`: a profile for the disposable AWS account. The harness uses it to call the deployed code and read stack outputs.',
       '`STACKTAPE_API_KEY`, or run `stacktape login` once.',
@@ -57,12 +62,17 @@ export default {
     ],
     gitPush: () => [
       'In the Stacktape Console, connect your fork and this branch to the project, with the stage `bmk` in `eu-west-1`. The Console runner builds in your AWS account with the Stacktape version set in the Console, so set the version you measure there.',
-      "To empty the runner's caches before each first push, delete the project's runner in the Console and pass `--cold-reset manual`."
+      "To empty the runner's caches before each first push, delete the project's runner in the Console and pass `--cold-reset manual`.",
+      'The Console runner installs Stacktape from npm, so this test needs a published version. The pinned commit above is not published, so the qualification results have no Stacktape Git push test.'
     ]
   },
   // JSON is valid YAML.
   files: (ctx) => ({ 'stacktape.yml': JSON.stringify(config(ctx), null, 2) }),
-  version: () => capture([bin(), 'version']).match(/version: (\S+?)\.?$/m)?.[1],
+  version() {
+    const version = capture([bin(), 'version']).match(/version: (\S+?)\.?$/m)?.[1];
+    if (process.env.STACKTAPE_BIN && !version?.endsWith(COMMIT.slice(0, 8))) throw new Error(`${process.env.STACKTAPE_BIN} is version ${version}, not a build of ${COMMIT}`);
+    return version;
+  },
   buildOutputs: ['.stacktape'],
   package: (ctx) => [bin(ctx), 'package', ...common],
   // `package` writes the function ZIPs and, beside them, the source maps that deploy uploads separately

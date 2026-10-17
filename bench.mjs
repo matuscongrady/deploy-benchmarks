@@ -54,6 +54,8 @@ async function prepare() {
   if (existsSync(dir)) return;
   writeProject(t, dir);
   commitProject(t, dir);
+  // The Git push test pushes to the test's branch of your fork, which the platforms deploy from.
+  if (process.env.BENCH_FORK) await git('remote', 'add', 'origin', process.env.BENCH_FORK);
   if (!tool.remoteBuild) for (const sub of installDirs(t, dir)) await run(['npm', 'ci', '--no-audit', '--no-fund'], { cwd: join(dir, sub), log });
 }
 
@@ -61,7 +63,7 @@ async function describeRun() {
   return {
     tool: toolName,
     toolVersion: await tool.version(ctx),
-    stacktapeCommit: toolName === 'stacktape' ? process.env.STACKTAPE_COMMIT : undefined,
+    stacktapeCommit: tool.commit,
     machine: await machine(),
     log: relative(ROOT, log)
   };
@@ -70,8 +72,11 @@ async function describeRun() {
 async function setup() {
   await prepare();
   for (const cmd of tool.setup?.(ctx) ?? []) await ctx.run(cmd);
+  // Tools that deploy only from Git create their services through their API here.
+  await tool.provision?.(ctx);
   const firstDeploy = tool.firstDeploy?.(ctx) ?? tool.deploy?.(ctx, targetNames(app));
   if (firstDeploy) for (const result of await runAll(firstDeploy)) if (result.code) throw new Error(`Deploy failed; see ${log}`);
+  for (const cmd of tool.afterFirstDeploy?.(ctx) ?? []) await ctx.run(cmd);
   const addresses = await tool.addresses(ctx);
   for (const target of targetNames(app)) {
     const response = await call(app, target, addresses[target], { business: true });
@@ -181,7 +186,8 @@ async function deployRuns() {
 /** Empties the build cache the next Git push would use. Returns how it was done. */
 async function resetCache() {
   if (tool.gitDeploy === 'github-actions') {
-    await ctx.run(['gh', 'cache', 'delete', '--all']);
+    // Only this branch's caches: other tests may be running in the same fork.
+    await ctx.run(['gh', 'cache', 'delete', '--all', '--ref', `refs/heads/${branch}`, '--succeed-on-no-caches']);
     return 'scripted';
   }
   if (tool.resetCache) {
@@ -211,7 +217,8 @@ async function pushRuns() {
 }
 
 async function remove() {
-  for (const cmd of list(tool.remove(ctx))) await ctx.run(cmd);
+  const removal = await tool.remove(ctx);
+  if (removal.length) for (const cmd of list(removal)) await ctx.run(cmd);
   // A remove command can exit 0 without deleting everything (SST does when interrupted), so check.
   const left = app.kind === 'lambda' ? await functionNames(`${name}-`) : [];
   if (left.length) throw new Error(`These functions still exist after remove: ${left.join(', ')}`);
