@@ -1,0 +1,104 @@
+{
+  "projectName": "bmk-stacktape-five-services",
+  "resources": {
+    "api": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "api/server.mjs"
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    },
+    "reporting": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "reporting/server.mjs"
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    },
+    "inventory": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "inventory/server.mjs"
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    },
+    "webhooks": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "webhooks/server.mjs"
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    },
+    "notifications": {
+      "type": "web-service",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "notifications/server.mjs"
+          }
+        },
+        "resources": {
+          "cpu": 0.25,
+          "memory": 512
+        }
+      }
+    }
+  },
+  "stackConfig": {
+    "outputs": [
+      {
+        "name": "apiUrl",
+        "value": "$ResourceParam('api', 'url')"
+      },
+      {
+        "name": "reportingUrl",
+        "value": "$ResourceParam('reporting', 'url')"
+      },
+      {
+        "name": "inventoryUrl",
+        "value": "$ResourceParam('inventory', 'url')"
+      },
+      {
+        "name": "webhooksUrl",
+        "value": "$ResourceParam('webhooks', 'url')"
+      },
+      {
+        "name": "notificationsUrl",
+        "value": "$ResourceParam('notifications', 'url')"
+      }
+    ]
+  }
+}
