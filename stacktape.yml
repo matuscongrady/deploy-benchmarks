@@ -1,0 +1,19 @@
+{
+  "projectName": "bmk-stacktape-lambda-1",
+  "resources": {
+    "salesReport": {
+      "type": "function",
+      "properties": {
+        "packaging": {
+          "type": "js-bundle",
+          "properties": {
+            "entryfilePath": "packages/functions/src/handlers/sales-report.ts"
+          }
+        },
+        "runtime": "nodejs22.x",
+        "memory": 512,
+        "timeout": 30
+      }
+    }
+  }
+}
