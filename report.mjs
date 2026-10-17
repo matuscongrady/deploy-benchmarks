@@ -35,9 +35,11 @@ function table(title, rows, key, columns) {
 // Container build time belongs to the deploy table: no tool builds an image except as part of its deploy.
 const packages = load('package.jsonl');
 const isContainer = (r) => APPS[r.app]?.kind === 'service';
+const done = (g) => g.filter((r) => !r.failed);
 table('Lambda packaging time and upload size', packages.filter((r) => !isContainer(r)), (r) => `${r.app} ${r.tool} ${r.cache}`, [
-  ['seconds: median (min–max)', (g) => stats(g.map((r) => r.ms), seconds)],
-  ['MB: median (min–max)', (g) => stats(g.map((r) => r.bytes), megabytes)]
+  ['failed', (g) => `${g.length - done(g).length}`],
+  ['seconds: median (min–max)', (g) => stats(done(g).map((r) => r.ms), seconds)],
+  ['MB: median (min–max)', (g) => stats(done(g).map((r) => r.bytes), megabytes)]
 ]);
 table('Container image size', packages.filter(isContainer), (r) => `${r.app} ${r.tool}`, [
   ['MB: median (min–max)', (g) => stats(g.map((r) => r.bytes), megabytes)]
@@ -45,10 +47,12 @@ table('Container image size', packages.filter(isContainer), (r) => `${r.app} ${r
 
 // Failed or incorrect deploys are listed, not averaged in.
 const deploys = load('deploy.jsonl');
-const good = deploys.filter((r) => r.businessOk && r.unchangedOk);
-table('Time from deploy start (or git push return) until the new code serves', good, (r) => `${r.app} ${r.tool} ${r.journey}`, [
-  ['seconds: median (min–max)', (g) => stats(g.map((r) => r.readyMs), seconds)]
+const ok = (r) => r.businessOk && r.unchangedOk;
+table('Time from deploy start (or git push return) until the new code serves', deploys, (r) => `${r.app} ${r.tool} ${r.journey} ${r.change}`, [
+  ['excluded', (g) => `${g.filter((r) => !ok(r)).length}`],
+  ['seconds: median (min–max)', (g) => stats(g.filter(ok).map((r) => r.readyMs), seconds)]
 ]);
-for (const r of deploys.filter((r) => !(r.businessOk && r.unchangedOk))) {
-  console.log(`Excluded: ${r.app} ${r.tool} ${r.journey} run ${r.run} (business check ${r.businessOk ? 'passed' : 'failed'}, unchanged targets ${r.unchangedOk ? 'kept' : 'changed'}); log ${r.log}`);
+for (const r of deploys.filter((r) => !ok(r))) {
+  const why = r.failed ? `failed: ${r.error}` : `business check ${r.businessOk ? 'passed' : 'failed'}, unchanged targets ${r.unchangedOk ? 'kept' : 'changed'}`;
+  console.log(`Excluded: ${r.app} ${r.tool} ${r.journey} ${r.change} run ${r.run} (${why}); log ${r.log}`);
 }

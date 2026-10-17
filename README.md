@@ -169,7 +169,13 @@ machine, the timings, the sizes and a log of every command.
 
 Every tool uses its documented defaults, except where noted in [Where a tool needed help](#where-a-tool-needed-help).
 On AWS, every function uses Node.js 22 with 512 MB of memory and a 30-second timeout, and every container uses
-0.25 vCPU and 512 MB. The npm tools are pinned in each project's `package.json` and `package-lock.json`. Render,
+0.25 vCPU and 512 MB on Fargate.
+
+**Regions and instance sizes.** The AWS tools deploy to `eu-west-1` (Ireland), and the measuring machine runs there
+too. Heroku apps run in Heroku's EU region, which is also in Ireland, and Render services in Frankfurt, Render's
+closest region. Each Heroku app runs on one Basic dyno (512 MB, always on) and each Render service on one Starter
+instance (0.5 CPU, 512 MB). These are the smallest always-on sizes of each platform, comparable to the 0.25 vCPU,
+512 MB Fargate tasks. The npm tools are pinned in each project's `package.json` and `package-lock.json`. Render,
 Heroku and Ravion choose their own build images, so they run whatever version the platform offers at the time of the
 measurement. The exact files are in the test branches and in [`configs/`](configs); `node configs.mjs` regenerates
 them from the tool modules in [`tools/`](tools).
@@ -237,15 +243,18 @@ them from the tool modules in [`tools/`](tools).
 ### Render
 
 - Configuration: [`configs/render/`](configs/render), written by [`tools/render.mjs`](tools/render.mjs).
-- Render's native Node.js and Python runtimes on Starter instances, with the build and start commands from Render's
-  Express and FastAPI guides.
+- Render's native Node.js and Python runtimes on Starter instances in Frankfurt, with the build and start commands
+  from Render's Express and FastAPI guides.
 - Render deploys only from a Git repository, so it has no laptop deploy. Build time comes from Render's build events.
+- `node bench.mjs setup` creates the services of `render.yaml` through the Render API. The first push of each pair
+  starts with "Clear build cache & deploy" of the previous commit, through the API, and waits until it is live.
 
 ### Heroku
 
 - [`tools/heroku.mjs`](tools/heroku.mjs). No extra configuration: the applications already have a `Procfile` and
   runtime version files.
-- The default stack and the official Node.js and Python buildpacks. Each service is its own Heroku app.
+- The default stack and the official Node.js and Python buildpacks. Each service is its own Heroku app, in the EU
+  region, on one Basic dyno.
 - Laptop deploy: `git push` to Heroku's Git remote. Git push: Heroku's GitHub integration with automatic deploys.
 - Heroku builds the repository root. For the five-service application we push each service with `git subtree push`,
   and its GitHub integration cannot deploy it.
@@ -262,10 +271,11 @@ them from the tool modules in [`tools/`](tools).
 | --- | --- | --- |
 | Keep `pdfkit` out of the bundle and install it as a package: `build.esbuild.external` (Serverless), `nodejs.install` (SST), `bundling.nodeModules` (CDK) | Serverless Framework, SST, AWS CDK | PDFKit reads its font files from disk. Bundled, the sales report fails with `ENOENT ... Helvetica.afm`. We checked that each of these tools fails without the setting. Stacktape detects such packages itself. Serverless applies `external` to every function, so each function's ZIP contains PDFKit. |
 | `package.individually: true` | Serverless Framework | By default all functions share one ZIP. For 25 functions that ZIP holds every bundle and source map, over 600 MB unpacked; Lambda accepts at most 250 MB. |
-| An esbuild `banner` that defines `require` | Serverless Framework | Serverless bundles this ES module project to an ES module, where CommonJS dependencies (ExcelJS, among others) cannot `require` Node.js built-ins. The banner is the fix in [Serverless's build guide](https://www.serverless.com/framework/docs/providers/aws/guide/building). CDK and Stacktape emit CommonJS. |
+| An esbuild `banner` that defines `require` | Serverless Framework | Serverless bundles this ES module project to an ES module, where CommonJS dependencies (ExcelJS, among others) cannot `require` Node.js built-ins. The banner is the fix in [Serverless's build guide](https://www.serverless.com/framework/docs/providers/aws/guide/building). Stacktape bundles to CommonJS and needs no setting. |
 | Load balancer health check path `/health` | SST, AWS CDK | The default path `/` returns 404 in these applications, so the services would never become healthy. |
 | A Dockerfile | SST, AWS CDK | Both need one to build a container. Stacktape, Render, Heroku and Ravion build from the source. |
 | `--awsAccount` | Stacktape | Stacktape deploys with credentials from the Stacktape Console for a connected AWS account, not with `AWS_PROFILE`. |
+| ES module output (`bundling.format: OutputFormat.ESM`) with a `banner` that defines `require` | AWS CDK | Prisma's generated client reads `import.meta.url`, which CDK's default CommonJS bundle leaves empty, so every function failed when Lambda loaded it. This is the same fix as Serverless's banner. |
 
 **Left at each tool's default:** the AWS SDK and Prisma. Stacktape, Serverless Framework and AWS CDK all leave
 `@aws-sdk/*` out of the bundle, because the Node.js 22 Lambda runtime provides it, and bundle Prisma's client, whose
@@ -291,7 +301,9 @@ query compiler is plain JavaScript and WebAssembly in Prisma 7. `prisma generate
 
 ## Run the benchmark
 
-Run on a dedicated machine in `eu-west-1`, the region of the deployments; we use EC2. Everything the benchmark
+Run on a dedicated machine in `eu-west-1`, the region of the deployments; we use EC2. Image sizes need Docker's
+containerd image store, the default of Docker Desktop and Docker Engine 29; the older overlay2 store reports
+unpacked sizes, so the harness refuses it. Everything the benchmark
 creates is named `bmk-*`. Install the harness's own dependency (the AWS SDK, to invoke functions) and set the
 credentials from the [table above](#reproduce-one-test):
 
@@ -331,12 +343,16 @@ The published results use a Stacktape CLI built from source. Each result records
 
 ```sh
 git clone https://github.com/stacktape/stacktape && cd stacktape
+git checkout d51f56ad17b9a24056046d7af99bd3716afb30da   # the commit in tools/stacktape.mjs
 pnpm install --frozen-lockfile
 pnpm turbo run build --filter=@stacktape/init-ui
 cd apps/cli
-bun scripts/build-dist-package.ts --platform linux --version 4.0.0-bench.$(git rev-parse --short HEAD) --keepUnarchived
-export STACKTAPE_BIN=$PWD/__dist/linux/stacktape STACKTAPE_COMMIT=$(git rev-parse HEAD)
+bun scripts/build-dist-package.ts --platform linux --version 4.0.0-bench.$(git rev-parse --short=8 HEAD) --keepUnarchived
+export STACKTAPE_BIN=$PWD/__dist/linux/stacktape
 ```
+
+This is the build the release workflow makes, with Node.js 24.15, pnpm 11.17 and Bun 1.4.1. The harness checks that
+the version of `STACKTAPE_BIN` ends in the pinned commit.
 
 ### Git push runs
 
@@ -346,11 +362,16 @@ with an empty build cache, then a second push 15 minutes after the first one fin
 
 You need a fork of this repository with all branches (untick "Copy the main branch only"), because the platforms
 deploy from your fork's branch. The project that `setup` writes has the same commit as the published branch, so its
-pushes continue your fork's branch. After `setup`, add your fork as the project's `origin`:
+pushes continue your fork's branch. Set `BENCH_FORK` before `setup`, which adds the fork as the project's `origin`:
 
 ```sh
-git -C work/bmk-<tool>-<app> remote add origin git@github.com:<you>/deploy-benchmarks.git
+export BENCH_FORK=https://github.com/<you>/deploy-benchmarks
 ```
+
+GitHub doesn't run workflows in a new fork until you turn them on in its Actions tab. The AWS role for the workflows
+must trust the fork's OIDC subject. New repositories get immutable subjects such as
+`repo:<you>@<owner id>/deploy-benchmarks@<repository id>:ref:refs/heads/<branch>`;
+`gh api repos/<you>/deploy-benchmarks/actions/oidc/customization/sub` shows the prefix.
 
 Then connect the deploy service to your fork's branch. Each test branch's README has these steps for its
 application:

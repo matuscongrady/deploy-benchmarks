@@ -124,10 +124,16 @@ async function packageRuns() {
     } else {
       for (const output of tool.buildOutputs) rmSync(join(dir, output), { recursive: true, force: true });
     }
-    const { ms } = await ctx.run(tool.package(ctx));
-    const { bytes, artifacts } = await measureArtifacts();
-    record('package.jsonl', { app: appId, cache: values.warm ? 'warm' : 'clean', run: i, ms, bytes, artifacts, ...info, at: new Date().toISOString() });
-    console.log(`${name} package run ${i}: ${ms} ms, ${bytes} bytes`);
+    const cache = values.warm ? 'warm' : 'clean';
+    try {
+      const { ms } = await ctx.run(tool.package(ctx));
+      const { bytes, artifacts } = await measureArtifacts();
+      record('package.jsonl', { app: appId, cache, run: i, ms, bytes, artifacts, ...info, at: new Date().toISOString() });
+      console.log(`${name} package run ${i}: ${ms} ms, ${bytes} bytes`);
+    } catch (error) {
+      record('package.jsonl', { app: appId, cache, run: i, failed: true, error: String(error.message ?? error).slice(0, 500), ...info, at: new Date().toISOString() });
+      console.log(`${name} package run ${i} failed: ${error.message}`);
+    }
   }
 }
 
@@ -188,13 +194,23 @@ async function timedChange({ journey, push, deploy }) {
   };
 }
 
+/** Runs one timed change. A run that fails is recorded with its error, never dropped. */
+async function attempt(journey, measure) {
+  try {
+    return await measure();
+  } catch (error) {
+    console.error(error);
+    return { journey, change: change.kind, changedTargets: change.targets.length, failed: true, error: String(error.message ?? error).slice(0, 500), businessOk: false, unchangedOk: false };
+  }
+}
+
 async function deployRuns() {
   if (!tool.deploy) throw new Error(`${toolName} deploys only from Git; use the push command`);
   const info = await describeRun();
   for (let i = 1; i <= runs; i++) {
-    const result = await timedChange({ journey: 'cli', deploy: tool.deploy(ctx) });
+    const result = await attempt('cli', () => timedChange({ journey: 'cli', deploy: tool.deploy(ctx) }));
     record('deploy.jsonl', { app: appId, run: i, ...result, ...info, at: new Date().toISOString() });
-    console.log(`${name} CLI deploy run ${i}: new code served after ${result.readyMs} ms`);
+    console.log(`${name} CLI deploy run ${i}: ${result.failed ? `failed: ${result.error}` : `new code served after ${result.readyMs} ms`}`);
   }
 }
 
@@ -222,11 +238,16 @@ async function pushRuns() {
     for (const cache of ['cold', 'warm']) {
       const coldReset = cache === 'cold' ? await resetCache() : undefined;
       if (cache === 'warm') await sleep(Math.max(0, readyAt + 15 * 60_000 - Date.now()));
-      const result = await timedChange({ journey: `git-${cache}`, push });
+      const result = await attempt(`git-${cache}`, () => timedChange({ journey: `git-${cache}`, push }));
       readyAt = Date.now();
-      const build = await tool.buildInfo?.({ ...ctx, pushedAt: result.pushedAt });
+      let build;
+      try {
+        build = result.failed ? undefined : await tool.buildInfo?.({ ...ctx, pushedAt: result.pushedAt });
+      } catch (error) {
+        build = { error: String(error.message ?? error).slice(0, 300) };
+      }
       record('deploy.jsonl', { app: appId, run: i, ...result, coldReset, build, ...info, at: new Date().toISOString() });
-      console.log(`${name} ${cache} Git push run ${i}: new code served after ${result.readyMs} ms`);
+      console.log(`${name} ${cache} Git push run ${i}: ${result.failed ? `failed: ${result.error}` : `new code served after ${result.readyMs} ms`}`);
     }
   }
 }
