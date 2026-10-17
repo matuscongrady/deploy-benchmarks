@@ -1,0 +1,67 @@
+service: bmk-serverless-lambda-25
+frameworkVersion: '4.44.0'
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: eu-west-1
+  memorySize: 512
+  timeout: 30
+package:
+  individually: true
+build:
+  esbuild:
+    external:
+      - pdfkit
+    banner:
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+functions:
+  create-order:
+    handler: src/handlers/create-order.handler
+  get-order:
+    handler: src/handlers/get-order.handler
+  list-products:
+    handler: src/handlers/list-products.handler
+  stripe-webhook:
+    handler: src/handlers/stripe-webhook.handler
+  order-confirmation-email:
+    handler: src/handlers/order-confirmation-email.handler
+  payment-capture:
+    handler: src/handlers/payment-capture.handler
+  inventory-reservation:
+    handler: src/handlers/inventory-reservation.handler
+  fulfilment-dispatch:
+    handler: src/handlers/fulfilment-dispatch.handler
+  refund-processor:
+    handler: src/handlers/refund-processor.handler
+  return-request:
+    handler: src/handlers/return-request.handler
+  review-moderation:
+    handler: src/handlers/review-moderation.handler
+  product-description:
+    handler: src/handlers/product-description.handler
+  loyalty-points:
+    handler: src/handlers/loyalty-points.handler
+  fraud-check:
+    handler: src/handlers/fraud-check.handler
+  invoice-email:
+    handler: src/handlers/invoice-email.handler
+  customer-sync:
+    handler: src/handlers/customer-sync.handler
+  delivery-notification:
+    handler: src/handlers/delivery-notification.handler
+  sales-report:
+    handler: src/handlers/sales-report.handler
+  shipment-tracking-sync:
+    handler: src/handlers/shipment-tracking-sync.handler
+  low-stock-alert:
+    handler: src/handlers/low-stock-alert.handler
+  daily-sales-summary:
+    handler: src/handlers/daily-sales-summary.handler
+  abandoned-cart-reminder:
+    handler: src/handlers/abandoned-cart-reminder.handler
+  product-feed-export:
+    handler: src/handlers/product-feed-export.handler
+  supplier-reorder:
+    handler: src/handlers/supplier-reorder.handler
+  data-retention-cleanup:
+    handler: src/handlers/data-retention-cleanup.handler
