@@ -1,0 +1,15 @@
+{
+  "name": "@shop/functions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@shop/service": "1.0.0",
+    "@shop/util": "1.0.0",
+    "docx": "9.11.0",
+    "exceljs": "4.4.0",
+    "p-map": "7.1.1",
+    "pdfkit": "0.20.2",
+    "zod": "4.6.7"
+  }
+}
