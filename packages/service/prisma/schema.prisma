@@ -1,0 +1,59 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  engineType   = "client"
+  runtime      = "nodejs"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Customer {
+  id        String   @id
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Product {
+  id          String  @id
+  name        String
+  category    String
+  price       Decimal @db.Decimal(10, 2)
+  stock       Int
+  weightGrams Int
+}
+
+model Order {
+  id         String      @id
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  status     String
+  total      Decimal     @db.Decimal(10, 2)
+  currency   String
+  placedAt   DateTime
+  lines      OrderLine[]
+  shipments  Shipment[]
+}
+
+model OrderLine {
+  id        String  @id
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+}
+
+model Shipment {
+  id             String   @id
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  carrier        String
+  trackingNumber String
+  status         String
+  updatedAt      DateTime
+}
